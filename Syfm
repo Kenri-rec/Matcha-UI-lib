@@ -1,6 +1,5 @@
 --[[
-
-Recreated x11-style UI Library for Roblox Executors
+Matcha UI Library - Drawing-based UI for Roblox Executors
 Based on x11-colorpicker.lua structure
 
 UILib.new(<string> identity, <Vector2> size, <table> watermarkActivity) -> UILib
@@ -20,29 +19,6 @@ UILib:ToggleMenu(boolean)
 UILib:ToggleWatermark(boolean)
 UILib:Step()
 UILib:Destroy()
-
-Example usage:
-local UILib = require('path/to/this/file')
-local myGui = UILib.new('MyUI', Vector2.new(320, 380), {'Activity1', 'Activity2'})
-
-local mainTab = myGui:Tab('Main')
-local generalSection = myGui:Section(mainTab, 'General')
-myGui:Checkbox(mainTab, generalSection, 'Enabled', false, function(state)
-    print('Enabled:', state)
-end)
-myGui:Slider(mainTab, generalSection, 'Distance', 100, function(value)
-    print('Distance:', value)
-end, 0, 500, 10, ' studs')
-
-myGui:CreateSettingsTab()
-
-local running = true
-while running do
-    myGui:Step()
-    wait(0.0015)
-end
-myGui:Destroy()
-
 ]]--
 
 UILib = {}
@@ -99,12 +75,10 @@ end
 function UILib.new(name, size, watermarkActivity)
     local self = setmetatable({}, UILib)
 
-    -- Wait for Roblox to be active
     repeat
         wait(1/9999)
     until isrbxactive and isrbxactive()
 
-    -- Input system
     self._inputs = {
         ['m1'] = { id = 0x01, held = false, click = false },
         ['m2'] = { id = 0x02, held = false, click = false },
@@ -180,7 +154,6 @@ function UILib.new(name, size, watermarkActivity)
     self._clipboard_color = nil
     self._tick = os.clock()
 
-    -- User settings
     self.identity = name
     self._watermark_activity = watermarkActivity or {}
     self.x = 20
@@ -188,7 +161,6 @@ function UILib.new(name, size, watermarkActivity)
     self.w = size and size.x or 300
     self.h = size and size.y or 400
 
-    -- Theme
     self._color_accent = Color3.fromRGB(255, 127, 0)
     self._color_text = Color3.fromRGB(255, 255, 255)
     self._color_crust = Color3.fromRGB(0, 0, 0)
@@ -196,13 +168,11 @@ function UILib.new(name, size, watermarkActivity)
     self._color_surface = Color3.fromRGB(38, 38, 38)
     self._color_overlay = Color3.fromRGB(76, 76, 76)
 
-    -- Styling
     self._title_h = 25
     self._tab_h = 20
     self._padding = 6
     self._gradient_detail = 80
 
-    -- Menu base drawings
     local base = Drawing.new('Square')
     base.Filled = true
     base.Color = self._color_surface
@@ -226,7 +196,6 @@ function UILib.new(name, size, watermarkActivity)
     title.Outline = true
     title.Color = self._color_text
 
-    -- Watermark drawings
     local watermarkBase = Drawing.new('Square')
     watermarkBase.Filled = true
     watermarkBase.Color = self._color_surface
@@ -309,7 +278,6 @@ function UILib:_SpawnDropdown(default, choices, multi, callback, position, width
         table.insert(drawings, entry)
     end
 
-    -- Convert to dictionary
     local choiceHash = {}
     for _, choice in ipairs(choices) do
         choiceHash[choice] = false
@@ -334,7 +302,6 @@ function UILib:_SpawnColorpicker(default, colorLabel, callback)
         self:_RemoveColorpicker()
     end
 
-    -- Base drawings
     local base = Drawing.new('Square')
     base.Filled = true
     base.Color = self._color_surface
@@ -360,14 +327,12 @@ function UILib:_SpawnColorpicker(default, colorLabel, callback)
 
     local drawings = { base, crust, border, titleBar, label }
 
-    -- Gradients
     for _ = 1, self._gradient_detail * 3 do
         local segment = Drawing.new('Square')
         segment.Filled = true
         table.insert(drawings, segment)
     end
 
-    -- Cursors
     local cursorCrustPrimary = Drawing.new('Circle')
     cursorCrustPrimary.Filled = false
     cursorCrustPrimary.Thickness = 3
@@ -736,7 +701,6 @@ function UILib:CreateSettingsTab(customName)
 end
 
 function UILib:Step()
-    -- Input processing
     local deltaTime = math.max(os.clock() - self._tick, 0.0035)
     local mousePos = getMousePos()
 
@@ -856,3 +820,177 @@ function UILib:Step()
     uiTitle.Transparency = baseOpacity
     uiTitle.Visible = childrenVisible
     uiTitle.Color = self._color_text
+
+    -- Input handling for dragging
+    local titleOrigin = Vector2.new(self.x, self.y)
+    local titleSize = Vector2.new(self.w, self._title_h)
+
+    if self._IsMouseWithinBounds(titleOrigin, titleSize) then
+        if clickFrame then
+            self._dragging = true
+            self._drag_offset = mousePos - titleOrigin
+        end
+    end
+
+    if self._dragging then
+        if m1Held then
+            self.x = mousePos.x - self._drag_offset.x
+            self.y = mousePos.y - self._drag_offset.y
+        else
+            self._dragging = false
+        end
+        clickFrame = false
+    end
+
+    -- Draw tabs
+    local numTabs = #self._tree['_tabs']
+    for tabIndex, tab in ipairs(self._tree['_tabs']) do
+        local tabName = tab['name']
+        local tabDraws = tab['_drawings']
+        local tabOpen = self._active_tab == tabName
+
+        local tabBackdrop = tabDraws[1]
+        local tabShadow = tabDraws[2]
+        local tabCursor = tabDraws[3]
+        local tabText = tabDraws[4]
+
+        local tabW = (self.w - self._padding * 2 - (numTabs - 1) * 2) / numTabs
+        local tabH = self._tab_h
+
+        local tabPosition = Vector2.new(self.x + self._padding + (tabIndex - 1) * (tabW + 2), self.y + self._title_h + self._padding)
+        local tabSize = Vector2.new(tabW, tabH)
+
+        tabBackdrop.Position = tabPosition
+        tabBackdrop.Size = tabSize
+        tabBackdrop.Transparency = baseOpacity
+        tabBackdrop.Visible = childrenVisible
+        tabBackdrop.Color = self._color_border
+
+        tabShadow.Position = tabPosition + Vector2.new(0, tabH - 8)
+        tabShadow.Size = Vector2.new(tabW, 8)
+        tabShadow.Transparency = 0.05 * baseOpacity
+        tabShadow.Visible = childrenVisible
+
+        tabCursor.Position = tabPosition
+        tabCursor.Size = Vector2.new(tabW, 1)
+        tabCursor.Transparency = baseOpacity
+        tabCursor.Visible = tabOpen and childrenVisible
+        tabCursor.Color = self._color_accent
+
+        tabText.Position = tabPosition + Vector2.new(4, tabH / 2 - ESP_FONTSIZE / 2)
+        tabText.Transparency = baseOpacity
+        tabText.Visible = childrenVisible
+        tabText.Color = self._color_text
+
+        -- Input handling for tabs
+        if clickFrame and self._IsMouseWithinBounds(tabPosition, tabSize) then
+            self._active_tab = tabName
+        end
+
+        -- Draw sections and items (simplified for this example)
+        if tabOpen then
+            for sectionIndex, section in ipairs(tab['_sections']) do
+                local sectionDraws = section['_drawings']
+                local sectionItems = section['_items']
+
+                -- Basic section drawing (you can expand this)
+                local sectionBase = sectionDraws[1]
+                local sectionCrust = sectionDraws[2]
+                local sectionBorder = sectionDraws[3]
+                local sectionTitle = sectionDraws[4]
+
+                -- Simple section positioning
+                local sectionY = self.y + self._title_h + self._tab_h + self._padding * 2 + (sectionIndex - 1) * 100
+                local sectionPos = Vector2.new(self.x + self._padding, sectionY)
+                local sectionSize = Vector2.new(self.w - self._padding * 2, 80)
+
+                sectionBase.Position = sectionPos
+                sectionBase.Size = sectionSize
+                sectionBase.Transparency = baseOpacity
+                sectionBase.Visible = childrenVisible
+
+                sectionCrust.Position = sectionPos
+                sectionCrust.Size = sectionSize
+                sectionCrust.Transparency = baseOpacity
+                sectionCrust.Visible = childrenVisible
+
+                sectionBorder.Position = sectionPos + Vector2.new(1, 1)
+                sectionBorder.Size = sectionSize - Vector2.new(2, 2)
+                sectionBorder.Transparency = baseOpacity
+                sectionBorder.Visible = childrenVisible
+
+                sectionTitle.Position = sectionPos + Vector2.new(10, 5)
+                sectionTitle.Transparency = baseOpacity
+                sectionTitle.Visible = childrenVisible
+
+                -- Draw items (basic implementation)
+                for itemIndex, item in ipairs(sectionItems) do
+                    local itemDraws = item['_drawings']
+                    for _, drawing in ipairs(itemDraws) do
+                        drawing.Transparency = baseOpacity
+                        drawing.Visible = childrenVisible
+                    end
+                end
+            end
+        else
+            -- Hide sections when tab is not active
+            for _, section in ipairs(tab['_sections']) do
+                undrawAll(section['_drawings'])
+                for _, item in ipairs(section['_items']) do
+                    undrawAll(item['_drawings'])
+                end
+            end
+        end
+    end
+
+    -- Handle dropdown and colorpicker
+    if self._active_dropdown and clickFrame then
+        self:_RemoveDropdown()
+    end
+
+    if self._active_colorpicker and clickFrame then
+        self:_RemoveColorpicker()
+    end
+
+    self._tick = os.clock()
+end
+
+function UILib:Destroy()
+    for _, drawing in pairs(self._tree['_drawings']) do
+        drawing:Remove()
+    end
+
+    self:_RemoveDropdown()
+    self:_RemoveColorpicker()
+
+    for _, tab in pairs(self._tree['_tabs']) do
+        if tab['_drawings'] then
+            for _, drawing in pairs(tab['_drawings']) do
+                drawing:Remove()
+            end
+        end
+
+        if tab._sections then
+            for _, section in pairs(tab['_sections']) do
+                for _, drawing in pairs(section['_drawings']) do
+                    drawing:Remove()
+                end
+                
+                if section._items then
+                    for _, item in pairs(section._items) do
+                        for _, drawing in pairs(item['_drawings']) do
+                            drawing:Remove()
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    self._tree = nil
+    if setrobloxinput then
+        setrobloxinput(true)
+    end
+end
+
+return UILib
