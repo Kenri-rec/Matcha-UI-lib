@@ -1,61 +1,22 @@
--- Matcha UI Library - Minimal Working Version
+-- Simple UI Library
 local UILib = {}
-UILib.__index = UILib
 
-function UILib.new(name, size, watermarkActivity)
-    local self = setmetatable({}, UILib)
+function UILib.new(name)
+    local self = {}
     self.name = name
-    self.size = size or Vector2.new(300, 400)
-    self._open = true
-    print("✅ UILib created:", name)
-    return self
+    return setmetatable(self, {__index = UILib})
 end
 
 function UILib:Tab(name)
-    print("Tab created:", name)
     return name
 end
 
-function UILib:Section(tabName, sectionName)
-    print("Section created:", tabName, sectionName)
-    return sectionName
+function UILib:Section(tab, name)
+    return name
 end
 
 function UILib:Checkbox(tab, section, label, default, callback)
-    print("Checkbox:", label, default)
     if callback then callback(default) end
-end
-
-function UILib:Slider(tab, section, label, default, callback, min, max, step, appendix)
-    print("Slider:", label, default, min, max)
-    if callback then callback(default) end
-end
-
-function UILib:Keybind(tab, section, label, default, callback, mode)
-    print("Keybind:", label, default, mode)
-    if callback then callback(default) end
-end
-
-function UILib:CreateSettingsTab(customName)
-    print("Settings tab created")
-    return "settings", "settings1", "settings2"
-end
-
-function UILib:ToggleMenu(state)
-    self._open = state
-    print("Menu toggled:", state)
-end
-
-function UILib:ToggleWatermark(state)
-    print("Watermark toggled:", state)
-end
-
-function UILib:Step()
-    -- Empty for now
-end
-
-function UILib:Destroy()
-    print("UI Destroyed")
 end
 
 return UILib
