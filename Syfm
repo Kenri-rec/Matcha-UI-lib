@@ -1708,6 +1708,7 @@ local toggleConnection
 toggleConnection = UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.RightShift then
         Library:SetOpen(not Library.Open)
+       end
     end
 end)
 table.insert(Library.Connections, toggleConnection)
