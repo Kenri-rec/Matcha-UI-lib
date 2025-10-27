@@ -1712,5 +1712,7 @@ toggleConnection = UserInputService.InputBegan:Connect(function(input)
 end)
 table.insert(Library.Connections, toggleConnection)
 
-return Library
+return Window
 end
+
+return Library
