@@ -1326,8 +1326,390 @@ function Window:Page(options)
             
             return List
         end
--- next :Scream:
-    return Window
+-- COLORPICKER ELEMENT
+        function Section:Colorpicker(options)
+            local Colorpicker = {
+                Section = Section,
+                Name = options.Name or "Colorpicker",
+                State = options.Default or Color3.fromRGB(255, 0, 0),
+                Alpha = options.Alpha or 1,
+                Callback = options.Callback or function() end,
+                Flag = options.Flag or tostring(#Library.Flags + 1),
+                Side = options.Side or "Left",
+                Open = false
+            }
+            
+            local elements = Colorpicker.Side == "Left" and Section.LeftElements or Section.RightElements
+            local panel = Colorpicker.Side == "Left" and Section.LeftPanel or Section.RightPanel
+            local yOffset = 30 + (#elements * 14)
+            
+            -- Text label
+            Colorpicker.Text = CreateDrawing("Text", {
+                Position = panel.Position + Vector2.new(15, yOffset),
+                Text = Colorpicker.Name,
+                Size = UI_SETTINGS.FontSize,
+                Color = COLORS.Text,
+                Visible = false,
+                ZIndex = 15,
+                Center = false,
+                Outline = false
+            })
+            
+            -- Color icon
+            Colorpicker.Icon = CreateDrawing("Square", {
+                Position = panel.Position + Vector2.new(panel.Size.X - 30, yOffset + 4),
+                Size = Vector2.new(15, 6),
+                Color = Colorpicker.State,
+                Filled = true,
+                Visible = false,
+                ZIndex = 15
+            })
+            
+            Colorpicker.IconBorder = CreateDrawing("Square", {
+                Position = panel.Position + Vector2.new(panel.Size.X - 30, yOffset + 4),
+                Size = Vector2.new(15, 6),
+                Color = Color3.fromRGB(0, 0, 0),
+                Filled = false,
+                Visible = false,
+                ZIndex = 15
+            })
+            
+            -- Picker window
+            local pickerPos = panel.Position + Vector2.new(panel.Size.X - 180, yOffset + 10)
+            
+            Colorpicker.Window = CreateDrawing("Square", {
+                Position = pickerPos,
+                Size = UI_SETTINGS.ColorPickerSize,
+                Color = COLORS.FrameBackground,
+                Filled = true,
+                Visible = false,
+                ZIndex = 120
+            })
+            
+            Colorpicker.WindowBorder = CreateDrawing("Square", {
+                Position = pickerPos,
+                Size = UI_SETTINGS.ColorPickerSize,
+                Color = COLORS.Border,
+                Filled = false,
+                Visible = false,
+                ZIndex = 120
+            })
+            
+            -- Rounded corners for picker window using circles
+            Colorpicker.CornerTL = CreateDrawing("Circle", {
+                Position = pickerPos + Vector2.new(2, 2),
+                Radius = 2,
+                Color = COLORS.FrameBackground,
+                Filled = true,
+                Visible = false,
+                ZIndex = 121,
+                NumSides = 16
+            })
+            
+            Colorpicker.CornerTR = CreateDrawing("Circle", {
+                Position = pickerPos + Vector2.new(UI_SETTINGS.ColorPickerSize.X - 2, 2),
+                Radius = 2,
+                Color = COLORS.FrameBackground,
+                Filled = true,
+                Visible = false,
+                ZIndex = 121,
+                NumSides = 16
+            })
+            
+            Colorpicker.CornerBL = CreateDrawing("Circle", {
+                Position = pickerPos + Vector2.new(2, UI_SETTINGS.ColorPickerSize.Y - 2),
+                Radius = 2,
+                Color = COLORS.FrameBackground,
+                Filled = true,
+                Visible = false,
+                ZIndex = 121,
+                NumSides = 16
+            })
+            
+            Colorpicker.CornerBR = CreateDrawing("Circle", {
+                Position = pickerPos + Vector2.new(UI_SETTINGS.ColorPickerSize.X - 2, UI_SETTINGS.ColorPickerSize.Y - 2),
+                Radius = 2,
+                Color = COLORS.FrameBackground,
+                Filled = true,
+                Visible = false,
+                ZIndex = 121,
+                NumSides = 16
+            })
+            
+            -- Saturation/Value picker
+            Colorpicker.Saturation = CreateDrawing("Square", {
+                Position = pickerPos + Vector2.new(5, 5),
+                Size = Vector2.new(123, 123),
+                Color = Colorpicker.State,
+                Filled = true,
+                Visible = false,
+                ZIndex = 120
+            })
+            
+            Colorpicker.SaturationBorder = CreateDrawing("Square", {
+                Position = pickerPos + Vector2.new(5, 5),
+                Size = Vector2.new(123, 123),
+                Color = COLORS.Border,
+                Filled = false,
+                Visible = false,
+                ZIndex = 120
+            })
+            
+            -- Hue bar
+            Colorpicker.Hue = CreateDrawing("Square", {
+                Position = pickerPos + Vector2.new(135, 5),
+                Size = Vector2.new(10, 123),
+                Color = Color3.fromRGB(255, 255, 255),
+                Filled = true,
+                Visible = false,
+                ZIndex = 120
+            })
+            
+            Colorpicker.HueBorder = CreateDrawing("Square", {
+                Position = pickerPos + Vector2.new(135, 5),
+                Size = Vector2.new(10, 123),
+                Color = COLORS.Border,
+                Filled = false,
+                Visible = false,
+                ZIndex = 120
+            })
+            
+            local hue, sat, val = Colorpicker.State:ToHSV()
+            local draggingSat = false
+            local draggingHue = false
+            
+            local function Set(color, alpha, updatePos)
+                if typeof(color) == "table" then
+                    alpha = color[4]
+                    color = Color3.fromHSV(color[1], color[2], color[3])
+                end
+                if typeof(color) == "string" then
+                    color = Color3.fromHex(color)
+                end
+                
+                hue, sat, val = color:ToHSV()
+                Colorpicker.State = Color3.fromHSV(hue, sat, val)
+                Colorpicker.Alpha = alpha or 1
+                
+                Colorpicker.Icon.Color = Colorpicker.State
+                Colorpicker.Saturation.Color = Color3.fromHSV(hue, 1, 1)
+                
+                Library.Flags[Colorpicker.Flag] = Colorpicker.State
+                Colorpicker.Callback(Colorpicker.State)
+            end
+            
+            Set(Colorpicker.State, Colorpicker.Alpha)
+            
+            local function UpdateSatVal(input)
+                local sizeX = math.clamp((input.Position.X - Colorpicker.Saturation.Position.X) / Colorpicker.Saturation.Size.X, 0, 1)
+                local sizeY = 1 - math.clamp((input.Position.Y - Colorpicker.Saturation.Position.Y) / Colorpicker.Saturation.Size.Y, 0, 1)
+                Set(Color3.fromHSV(hue, sizeX, sizeY), Colorpicker.Alpha, true)
+            end
+            
+            local function UpdateHue(input)
+                local sizeY = 1 - math.clamp((input.Position.Y - Colorpicker.Hue.Position.Y) / Colorpicker.Hue.Size.Y, 0, 1)
+                hue = sizeY
+                Colorpicker.Saturation.Color = Color3.fromHSV(sizeY, 1, 1)
+                Set(Color3.fromHSV(sizeY, sat, val), Colorpicker.Alpha, true)
+            end
+            
+            function Colorpicker:Set(color, alpha)
+                Set(color, alpha)
+            end
+            
+            function Colorpicker:UpdateVisibility(visible)
+                Colorpicker.Text.Visible = visible
+                Colorpicker.Icon.Visible = visible
+                Colorpicker.IconBorder.Visible = visible
+                
+                local pickerVisible = visible and Colorpicker.Open
+                Colorpicker.Window.Visible = pickerVisible
+                Colorpicker.WindowBorder.Visible = pickerVisible
+                Colorpicker.CornerTL.Visible = pickerVisible
+                Colorpicker.CornerTR.Visible = pickerVisible
+                Colorpicker.CornerBL.Visible = pickerVisible
+                Colorpicker.CornerBR.Visible = pickerVisible
+                Colorpicker.Saturation.Visible = pickerVisible
+                Colorpicker.SaturationBorder.Visible = pickerVisible
+                Colorpicker.Hue.Visible = pickerVisible
+                Colorpicker.HueBorder.Visible = pickerVisible
+            end
+            
+            function Colorpicker:UpdatePositions()
+                local panel = Colorpicker.Side == "Left" and Section.LeftPanel or Section.RightPanel
+                local elements = Colorpicker.Side == "Left" and Section.LeftElements or Section.RightElements
+                local index = 0
+                for i, elem in ipairs(elements) do
+                    if elem == Colorpicker then
+                        index = i - 1
+                        break
+                    end
+                end
+                local yOffset = 30 + (index * 14)
+                
+                Colorpicker.Text.Position = panel.Position + Vector2.new(15, yOffset)
+                Colorpicker.Icon.Position = panel.Position + Vector2.new(panel.Size.X - 30, yOffset + 4)
+                Colorpicker.IconBorder.Position = panel.Position + Vector2.new(panel.Size.X - 30, yOffset + 4)
+                
+                local pickerPos = panel.Position + Vector2.new(panel.Size.X - 180, yOffset + 10)
+                Colorpicker.Window.Position = pickerPos
+                Colorpicker.WindowBorder.Position = pickerPos
+                Colorpicker.CornerTL.Position = pickerPos + Vector2.new(2, 2)
+                Colorpicker.CornerTR.Position = pickerPos + Vector2.new(UI_SETTINGS.ColorPickerSize.X - 2, 2)
+                Colorpicker.CornerBL.Position = pickerPos + Vector2.new(2, UI_SETTINGS.ColorPickerSize.Y - 2)
+                Colorpicker.CornerBR.Position = pickerPos + Vector2.new(UI_SETTINGS.ColorPickerSize.X - 2, UI_SETTINGS.ColorPickerSize.Y - 2)
+                Colorpicker.Saturation.Position = pickerPos + Vector2.new(5, 5)
+                Colorpicker.SaturationBorder.Position = pickerPos + Vector2.new(5, 5)
+                Colorpicker.Hue.Position = pickerPos + Vector2.new(135, 5)
+                Colorpicker.HueBorder.Position = pickerPos + Vector2.new(135, 5)
+            end
+            
+            -- Icon click handler
+            local iconConnection = UserInputService.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 and Section.Active and Page.Active and Library.Open then
+                    if IsMouseOver(Colorpicker.Icon.Position, Colorpicker.Icon.Size) then
+                        Colorpicker.Open = not Colorpicker.Open
+                        Colorpicker:UpdateVisibility(true)
+                    end
+                end
+            end)
+            table.insert(Library.Connections, iconConnection)
+            
+            -- Saturation picker handlers
+            local satBeginConnection = UserInputService.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 and Colorpicker.Open and Library.Open then
+                    if IsMouseOver(Colorpicker.Saturation.Position, Colorpicker.Saturation.Size) then
+                        draggingSat = true
+                        UpdateSatVal(input)
+                    end
+                end
+            end)
+            table.insert(Library.Connections, satBeginConnection)
+            
+            local satEndConnection = UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    draggingSat = false
+                end
+            end)
+            table.insert(Library.Connections, satEndConnection)
+            
+            -- Hue bar handlers
+            local hueBeginConnection = UserInputService.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 and Colorpicker.Open and Library.Open then
+                    if IsMouseOver(Colorpicker.Hue.Position, Colorpicker.Hue.Size) then
+                        draggingHue = true
+                        UpdateHue(input)
+                    end
+                end
+            end)
+            table.insert(Library.Connections, hueBeginConnection)
+            
+            local hueEndConnection = UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    draggingHue = false
+                end
+            end)
+            table.insert(Library.Connections, hueEndConnection)
+            
+            -- Mouse move handler
+            local moveConnection = UserInputService.InputChanged:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    if draggingSat then
+                        UpdateSatVal(input)
+                    elseif draggingHue then
+                        UpdateHue(input)
+                    end
+                end
+            end)
+            table.insert(Library.Connections, moveConnection)
+            
+            -- Close when clicking outside
+            local closeConnection = UserInputService.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 and Colorpicker.Open and Library.Open then
+                    if not IsMouseOver(Colorpicker.Window.Position, Colorpicker.Window.Size) and 
+                       not IsMouseOver(Colorpicker.Icon.Position, Colorpicker.Icon.Size) then
+                        Colorpicker.Open = false
+                        Colorpicker:UpdateVisibility(Section.Active and Page.Active)
+                    end
+                end
+            end)
+            table.insert(Library.Connections, closeConnection)
+            
+            table.insert(elements, Colorpicker)
+            Library.Flags[Colorpicker.Flag] = Colorpicker.State
+            
+            return Colorpicker
+        end
+-- Add first section automatically
+        table.insert(Page.Sections, Section)
+        if #Page.Sections == 1 then
+            Section:Activate()
+        end
+        
+        return Section
+    end
+    
+    -- Add first page automatically
+    table.insert(Window.Pages, Page)
+    if #Window.Pages == 1 then
+        Page:Activate()
+    end
+    
+    return Page
 end
+
+-- Toggle UI visibility
+function Library:SetOpen(state)
+    Library.Open = state
+    
+    for _, obj in ipairs(Library.Objects) do
+        if obj.Visible ~= nil then
+            obj.Visible = state
+        end
+    end
+    
+    -- Update all page visibilities
+    for _, page in ipairs(Library.Pages) do
+        if page.Active then
+            page:Activate()
+        else
+            page:Deactivate()
+        end
+    end
+end
+
+-- Change accent color
+function Library:ChangeAccent(color)
+    Library.Accent = color
+    
+    -- Update all accent colored objects
+    for _, obj in ipairs(Library.Objects) do
+        -- This would need to track which objects use accent color
+        -- For now, you'd need to manually update them
+    end
+end
+
+-- Cleanup function
+function Library:Unload()
+    for _, connection in ipairs(Library.Connections) do
+        connection:Disconnect()
+    end
+    
+    for _, obj in ipairs(Library.Objects) do
+        obj:Remove()
+    end
+    
+    Library.Objects = {}
+    Library.Connections = {}
+end
+
+-- UI Toggle keybind (Right Shift)
+local toggleConnection
+toggleConnection = UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        Library:SetOpen(not Library.Open)
+    end
+end)
+table.insert(Library.Connections, toggleConnection)
 
 return Library
