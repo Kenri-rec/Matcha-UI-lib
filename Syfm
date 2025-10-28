@@ -1,503 +1,388 @@
--- x11-colorpicker.lua with Rounded Corners
--- Modified by adding circle-based rounded corners to all UI elements
+-- UILib - Beautified and Cleaned Version
+-- Extracted from Arcane Hub
 
-UILib = {}
+local UILib = {}
 UILib.__index = UILib
 
-ESP_FONTSIZE = 7
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 
-BLACK = Color3.new(0, 0, 0)
-
-local myPlayer = game:GetService('Players').LocalPlayer
-local myMouse = myPlayer:GetMouse()
-
-local function clamp(x, a, b)
-    if x > b then
-        return b
-    elseif x < a then
-        return a
+-- Utility Functions
+local function clamp(value, min, max)
+    if value < min then
+        return min
+    elseif value > max then
+        return max
     else
-        return x
+        return value
     end
 end
 
-local function color3fromHSV(h, s, v)
-    local i = math.floor(h * 6)
-    local f = h * 6 - i
-    local p = v * (1 - s)
-    local q = v * (1 - f * s)
-    local t = v * (1 - (1 - f) * s)
-    i = i % 6
-
-    local r, g, b
-    if i == 0 then r, g, b = v, t, p
-    elseif i == 1 then r, g, b = q, v, p
-    elseif i == 2 then r, g, b = p, v, t
-    elseif i == 3 then r, g, b = p, q, v
-    elseif i == 4 then r, g, b = t, p, v
-    else r, g, b = v, p, q end
-
-    return {r * 255, g * 255, b * 255}
+local function GetMousePosition()
+    return Vector2.new(Mouse.X, Mouse.Y)
 end
 
-local function getMousePos()
-    return Vector2.new(myMouse.X, myMouse.Y) 
+function UILib._IsMouseWithinBounds(position, size)
+    local mousePos = GetMousePosition()
+    return position and size and 
+           mousePos.X >= position.X and mousePos.X <= position.X + size.X and
+           mousePos.Y >= position.Y and mousePos.Y <= position.Y + size.Y
 end
 
-local function lerp(a, b, t)
-    return a + (b - a) * t
-end
+-- Constants
+local UI_VISIBLE = true
+local WINDOW_X, WINDOW_Y = 200, 200
+local WINDOW_WIDTH, WINDOW_HEIGHT = 600, 350
+local TAB_WIDTH, TAB_HEIGHT = 100, 30
+local TAB_SPACING = 10
+local CONTENT_WIDTH = 420
+local CONTROL_HEIGHT = 35
+local SLIDER_WIDTH = 120
+local COLOR_PREVIEW_SIZE = 20
+local CHECKBOX_SIZE = 25
 
-local function undrawAll(drawingsTable)
-    for _, drawing in pairs(drawingsTable) do
-        drawing.Visible = false
-    end
-end
+-- Colors
+local BACKGROUND_COLOR = Color3.fromRGB(20, 20, 20)
+local ACCENT_COLOR = Color3.fromRGB(106, 0, 255)
+local TAB_COLOR = Color3.fromRGB(30, 30, 30)
+local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+local CONTROL_BG_COLOR = Color3.fromRGB(40, 40, 40)
+local HOVER_COLOR = Color3.fromRGB(50, 50, 50)
 
-local function destroyAllDrawings(drawingsTable)
-    for _, drawing in ipairs(drawingsTable) do
-        drawing:Remove()
-    end
-end
+-- ZIndex Layers
+local BASE_ZINDEX = 1
+local WINDOW_ZINDEX = BASE_ZINDEX + 10
+local TAB_ZINDEX = WINDOW_ZINDEX + 10
+local TEXT_ZINDEX = TAB_ZINDEX + 10
+local HIGHEST_ZINDEX = 9999
 
--- Helper function to create rounded corners
-local function addRoundedCorners(drawings, position, size, color, radius, filled)
-    radius = radius or 4
-    
-    local cornerTL = Drawing.new('Circle')
-    cornerTL.Position = position + Vector2.new(radius, radius)
-    cornerTL.Radius = radius
-    cornerTL.Color = color
-    cornerTL.Filled = filled
-    cornerTL.NumSides = 16
-    cornerTL.Visible = true
-    table.insert(drawings, cornerTL)
-    
-    local cornerTR = Drawing.new('Circle')
-    cornerTR.Position = position + Vector2.new(size.x - radius, radius)
-    cornerTR.Radius = radius
-    cornerTR.Color = color
-    cornerTR.Filled = filled
-    cornerTR.NumSides = 16
-    cornerTR.Visible = true
-    table.insert(drawings, cornerTR)
-    
-    local cornerBL = Drawing.new('Circle')
-    cornerBL.Position = position + Vector2.new(radius, size.y - radius)
-    cornerBL.Radius = radius
-    cornerBL.Color = color
-    cornerBL.Filled = filled
-    cornerBL.NumSides = 16
-    cornerBL.Visible = true
-    table.insert(drawings, cornerBL)
-    
-    local cornerBR = Drawing.new('Circle')
-    cornerBR.Position = position + Vector2.new(size.x - radius, size.y - radius)
-    cornerBR.Radius = radius
-    cornerBR.Color = color
-    cornerBR.Filled = filled
-    cornerBR.NumSides = 16
-    cornerBR.Visible = true
-    table.insert(drawings, cornerBR)
-    
-    return {cornerTL, cornerTR, cornerBL, cornerBR}
-end
+-- Keycodes
+local KEYCODES = {
+    A = 0x41, B = 0x42, C = 0x43, D = 0x44, E = 0x45, F = 0x46, G = 0x47,
+    H = 0x48, I = 0x49, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E,
+    O = 0x4F, P = 0x50, Q = 0x51, R = 0x52, S = 0x53, T = 0x54, U = 0x55,
+    V = 0x56, W = 0x57, X = 0x58, Y = 0x59, Z = 0x5A,
+    M1 = 0x01, M2 = 0x02,
+    ["1"] = 0x31, ["2"] = 0x32, ["3"] = 0x33, ["4"] = 0x34, ["5"] = 0x35,
+    ["6"] = 0x36, ["7"] = 0x37, ["8"] = 0x38, ["9"] = 0x39, ["0"] = 0x30,
+    SHIFT = 0x10, RSHIFT = 0xA1, CONTROL = 0x11, RCONTROL = 0xA3,
+    BACKSPACE = 0x08, SPACE = 0x20, ENTER = 0x0D, TAB = 0x09, ESCAPE = 0x1B
+}
 
-function UILib.new(name, size, watermarkActivity)
-    repeat
-        wait(1/9999)
-    until isrbxactive()
-
+-- Window Creation
+function UILib:CreateWindow(config)
     local self = setmetatable({}, UILib)
-
-    -- Input system (abbreviated for space - use original input table from x11)
-    self._inputs = {
-        ['m1'] = { id = 0x01, held = false, click = false },
-        ['m2'] = { id = 0x02, held = false, click = false },
-        ['tab'] = { id = 0x09, held = false, click = false },
-        ['enter'] = { id = 0x0D, held = false, click = false },
-        ['shift'] = { id = 0x10, held = false, click = false },
-        ['esc'] = { id = 0x1B, held = false, click = false },
-        ['space'] = { id = 0x20, held = false, click = false },
-        ['f1'] = { id = 0x70, held = false, click = false },
-        ['f2'] = { id = 0x71, held = false, click = false },
-        -- Add all other keys from original...
-    }
-
-    self._active_tab = nil
-    self._open = true
-    self._watermark = true
-    self._base_opacity = 0
-    self._dragging = false
-    self._drag_offset = Vector2.new(0, 0)
-    self._active_dropdown = nil
-    self._active_colorpicker = nil
-    self._clipboard_color = nil
-    self._tick = os.clock()
-
-    self.identity = name
-    self._watermark_activity = watermarkActivity
-    self.x = 20
-    self.y = 60
-    self.w = size and size.x or 300
-    self.h = size and size.y or 400
-
-    -- Theme colors
-    self._color_accent = Color3.fromRGB(255, 127, 0)
-    self._color_text = Color3.fromRGB(255, 255, 255)
-    self._color_crust = Color3.fromRGB(0, 0, 0)
-    self._color_border = Color3.fromRGB(25, 25, 25)
-    self._color_surface = Color3.fromRGB(38, 38, 38)
-    self._color_overlay = Color3.fromRGB(76, 76, 76)
-
-    self._title_h = 25
-    self._tab_h = 20
-    self._padding = 6
-    self._gradient_detail = 80
-
-    -- Menu base with rounded corners
-    local base = Drawing.new('Square')
-    base.Filled = true
-    base.Color = self._color_surface
-
-    local crust = Drawing.new('Square')
-    crust.Filled = false
-    crust.Thickness = 1
-    crust.Color = self._color_crust
-
-    local border = Drawing.new('Square')
-    border.Filled = false
-    border.Thickness = 1
-    border.Color = self._color_border
-
-    local navbar = Drawing.new('Square')
-    navbar.Filled = true
-    navbar.Color = self._color_border
-
-    local title = Drawing.new('Text')
-    title.Text = self.identity
-    title.Outline = true
-    title.Color = self._color_text
-
-    -- Add rounded corners for base
-    local baseDrawings = {crust, border, base, navbar, title}
-    self._base_corners = addRoundedCorners(baseDrawings, Vector2.new(self.x, self.y), Vector2.new(self.w, self.h), self._color_surface, 6, true)
     
-    -- Watermark with rounded corners
-    local watermarkBase = Drawing.new('Square')
-    watermarkBase.Filled = true
-    watermarkBase.Color = self._color_surface
-
-    local watermarkCursor = Drawing.new('Square')
-    watermarkCursor.Filled = true
-    watermarkCursor.Color = self._color_accent
-
-    local watermarkCrust = Drawing.new('Square')
-    watermarkCrust.Filled = false
-    watermarkCrust.Thickness = 1
-    watermarkCrust.Color = self._color_crust
-
-    local watermarkBorder = Drawing.new('Square')
-    watermarkBorder.Filled = false
-    watermarkBorder.Thickness = 1
-    watermarkBorder.Color = self._color_border
-
-    local watermarkText = Drawing.new('Text')
-    watermarkText.Text = name
-    watermarkText.Outline = true
-    watermarkText.Color = self._color_text
-
-    local watermarkDrawings = {watermarkBase, watermarkCursor, watermarkCrust, watermarkBorder, watermarkText}
-    self._watermark_corners = addRoundedCorners(watermarkDrawings, Vector2.new(20, 20), Vector2.new(100, 30), self._color_surface, 4, true)
-
-    self._tree = {
-        ['_tabs'] = {},
-        ['_drawings'] = baseDrawings,
-        ['_watermark_drawings'] = watermarkDrawings
-    }
-
+    self.tabs = {}
+    self.activeTab = nil
+    self.name = config.Name or "Window"
+    self.theme = config.Theme or "Default"
+    self.toggleKey = config.ToggleUIKeybind or "K"
+    self.minimized = false
+    self.notifications = {}
+    
+    -- Create window background
+    self.base = Drawing.new("Square")
+    self.base.Size = Vector2.new(WINDOW_WIDTH, WINDOW_HEIGHT)
+    self.base.Position = Vector2.new(WINDOW_X, WINDOW_Y)
+    self.base.Filled = true
+    self.base.Color = BACKGROUND_COLOR
+    self.base.Visible = UI_VISIBLE
+    self.base.Corner = 7
+    self.base.ZIndex = WINDOW_ZINDEX
+    
+    -- Create title
+    self.title = Drawing.new("Text")
+    self.title.Text = self.name
+    self.title.Position = Vector2.new(WINDOW_X + 10, WINDOW_Y + 10)
+    self.title.Color = TEXT_COLOR
+    self.title.Visible = UI_VISIBLE
+    self.title.ZIndex = TEXT_ZINDEX
+    
     return self
 end
 
-function UILib._GetTextBounds(str)
-    return #str * ESP_FONTSIZE, ESP_FONTSIZE
-end
-
-function UILib._IsMouseWithinBounds(origin, size)
-    local mousePos = getMousePos()
-    return mousePos.x >= origin.x and mousePos.x <= origin.x + size.x and 
-           mousePos.y >= origin.y and mousePos.y <= origin.y + size.y
-end
-
-function UILib:_RemoveDropdown()
-    if self._active_dropdown then
-        destroyAllDrawings(self._active_dropdown['_drawings'])
-        self._active_dropdown = nil
-    end
-end
-
-function UILib:_RemoveColorpicker()
-    if self._active_colorpicker then
-        destroyAllDrawings(self._active_colorpicker['_drawings'])
-        self._active_colorpicker = nil
-    end
-end
-
--- Rest of the functions would be the same as original x11
--- (Tab, Section, Checkbox, Slider, Choice, Colorpicker, Button, Keybind, CreateSettingsTab, Step, Destroy)
--- I'll include the essential ones:
-
-function UILib:Tab(name)
-    local backdrop = Drawing.new('Square')
-    backdrop.Color = self._color_border
-    backdrop.Filled = true
-
-    local shadow = Drawing.new('Square')
-    shadow.Color = BLACK
-    shadow.Filled = true
-
-    local cursor = Drawing.new('Square')
-    cursor.Color = self._color_accent
-    cursor.Filled = true
-
-    local text = Drawing.new('Text')
-    text.Color = self._color_text
-    text.Outline = true
-    text.Text = name
-
-    table.insert(self._tree['_tabs'], {
-        ['name'] = name,
-        ['_sections'] = {},
-        ['_drawings'] = { backdrop, shadow, cursor, text }
-    })
-
-    if self._active_tab == nil then
-        self._active_tab = name
-    end
-
-    return name
-end
-
-function UILib:Section(tabName, name)
-    for _, tab in ipairs(self._tree['_tabs']) do
-        if tab['name'] == tabName then
-            local base = Drawing.new('Square')
-            base.Filled = true
-            base.Color = self._color_surface
-
-            local crust = Drawing.new('Square')
-            crust.Filled = false
-            crust.Thickness = 1
-            crust.Color = self._color_crust
-
-            local border = Drawing.new('Square')
-            border.Filled = false
-            border.Thickness = 1
-            border.Color = self._color_overlay
-
-            local title = Drawing.new('Text')
-            title.Text = name
-            title.Outline = true
-            title.Color = self._color_text
-
-            local drawings = {base, crust, border, title}
-            local corners = addRoundedCorners(drawings, Vector2.new(0, 0), Vector2.new(100, 100), self._color_surface, 4, true)
-
-            local section = {
-                ['name'] = name,
-                ['_items'] = {},
-                ['_drawings'] = drawings,
-                ['_corners'] = corners
-            }
-
-            table.insert(tab._sections, section)
-            return name
-        end
-    end
-end
-
--- Checkbox implementation
-function UILib:Checkbox(tabName, sectionName, label, defaultValue, callback)
-    local outline = Drawing.new('Square')
-    outline.Color = self._color_crust
-    outline.Thickness = 1
-    outline.Filled = false
-
-    local check = Drawing.new('Square')
-    check.Color = self._color_accent
-    check.Filled = true
-
-    local checkShadow = Drawing.new('Square')
-    checkShadow.Color = BLACK
-    checkShadow.Filled = true
-
-    local text = Drawing.new('Text')
-    text.Color = self._color_text
-    text.Outline = true
-    text.Text = label
-
-    self:_AddToSection(tabName, sectionName, 'checkbox', defaultValue, callback, {
-        outline, check, checkShadow, text
-    })
-end
-
-function UILib:_AddToSection(tabName, sectionName, itemType, value, callback, drawings, meta)
-    for _, tab in pairs(self._tree._tabs) do
-        if tab.name == tabName then
-            for _, section in pairs(tab._sections) do
-                if section.name == sectionName then
-                    local item = {
-                        ['type'] = itemType,
-                        ['value'] = value,
-                        ['callback'] = callback,
-                        ['_drawings'] = drawings
-                    }
-
-                    if meta then
-                        for key, val in pairs(meta) do
-                            item[key] = val
-                        end
-                    end
-
-                    table.insert(section._items, item)
-                    return
-                end
-            end
-        end
-    end
-end
-
-function UILib:ToggleWatermark(state)
-    self._watermark = state
-end
-
-function UILib:ToggleMenu(state)
-    self._open = state
-end
-
-function UILib:IsMenuOpen()
-    return self._open
-end
-
--- Minimal Step function - would need full implementation from original
-function UILib:Step()
-    local deltaTime = math.max(os.clock() - self._tick, 0.0035)
-    local mousePos = getMousePos()
-
-    -- Input handling
-    for keycode, inputData in pairs(self._inputs) do
-        local keycodeId = inputData['id']
-        local interacted = iskeypressed(keycodeId)
-        if isrbxactive() and interacted then
-            if inputData['held'] == false and inputData['click'] == false then
-                self._inputs[keycode]['click'] = true
-            else
-                self._inputs[keycode]['click'] = false
-            end
-            self._inputs[keycode]['held'] = true
-        else
-            self._inputs[keycode]['held'] = false
-        end
-    end
-
-    local menuOpen = self._open
-    local clickFrame = menuOpen and self._inputs['m1'].click
-    local baseOpacity = self._base_opacity
-    local childrenVisible = baseOpacity > 0.22
-    self._base_opacity = clamp(lerp(baseOpacity, menuOpen == true and 1 or 0, deltaTime * 11), 0, 1)
-
-    setrobloxinput(not menuOpen)
-
-    -- Update base drawings
-    local baseDrawings = self._tree['_drawings']
-    local uiCrust = baseDrawings[1]
-    local uiBorder = baseDrawings[2]
-    local uiBase = baseDrawings[3]
-    local uiNavbar = baseDrawings[4]
-    local uiTitle = baseDrawings[5]
-
-    uiBase.Position = Vector2.new(self.x, self.y)
-    uiBase.Size = Vector2.new(self.w, self.h)
-    uiBase.Transparency = baseOpacity
-    uiBase.Visible = childrenVisible
-
-    -- Update rounded corners
-    for i, corner in ipairs(self._base_corners) do
-        local radius = 6
-        if i == 1 then corner.Position = Vector2.new(self.x + radius, self.y + radius)
-        elseif i == 2 then corner.Position = Vector2.new(self.x + self.w - radius, self.y + radius)
-        elseif i == 3 then corner.Position = Vector2.new(self.x + radius, self.y + self.h - radius)
-        elseif i == 4 then corner.Position = Vector2.new(self.x + self.w - radius, self.y + self.h - radius)
-        end
-        corner.Transparency = baseOpacity
-        corner.Visible = childrenVisible
-        corner.Color = self._color_surface
-    end
-
-    uiBorder.Position = Vector2.new(self.x + 1, self.y + 1)
-    uiBorder.Size = Vector2.new(self.w - 2, self.h - 2)
-    uiBorder.Transparency = baseOpacity
-    uiBorder.Visible = childrenVisible
-
-    uiCrust.Position = Vector2.new(self.x, self.y)
-    uiCrust.Size = Vector2.new(self.w, self.h)
-    uiCrust.Transparency = baseOpacity
-    uiCrust.Visible = childrenVisible
-
-    uiNavbar.Position = Vector2.new(self.x + 2, self.y + 2)
-    uiNavbar.Size = Vector2.new(self.w - 4, self._title_h - 4)
-    uiNavbar.Transparency = baseOpacity
-    uiNavbar.Visible = childrenVisible
-
-    local _titleW, titleH = self._GetTextBounds('')
-    uiTitle.Position = Vector2.new(self.x + 7, self.y + self._title_h / 2 - titleH + 2)
-    uiTitle.Transparency = baseOpacity
-    uiTitle.Visible = childrenVisible
-
-    self._tick = os.clock()
-end
-
-function UILib:Destroy()
-    for _, drawing in pairs(self._tree['_drawings']) do
-        drawing:Remove()
+-- Tab Creation
+function UILib:CreateTab(name)
+    local tabIndex = #self.tabs + 1
+    local tabY = WINDOW_Y + 50 + (tabIndex - 1) * (TAB_HEIGHT + TAB_SPACING)
+    local tabId = "tab_" .. tabIndex
+    
+    -- Tab background
+    local tabBg = Drawing.new("Square")
+    tabBg.Size = Vector2.new(TAB_WIDTH, TAB_HEIGHT)
+    tabBg.Position = Vector2.new(WINDOW_X + 10, tabY)
+    tabBg.Filled = true
+    tabBg.Color = TAB_COLOR
+    tabBg.Visible = UI_VISIBLE
+    tabBg.Corner = 5
+    tabBg.ZIndex = TAB_ZINDEX
+    
+    -- Tab label
+    local tabLabel = Drawing.new("Text")
+    tabLabel.Text = name
+    tabLabel.Position = Vector2.new(WINDOW_X + 20, tabY + 8)
+    tabLabel.Color = TEXT_COLOR
+    tabLabel.Visible = UI_VISIBLE
+    tabLabel.ZIndex = TEXT_ZINDEX
+    
+    -- Active tab indicator
+    local indicator = Drawing.new("Square")
+    indicator.Size = Vector2.new(7, 20)
+    indicator.Position = Vector2.new(WINDOW_X + 10, tabY + 5)
+    indicator.Filled = true
+    indicator.Color = ACCENT_COLOR
+    indicator.Visible = false
+    indicator.Corner = 5
+    indicator.ZIndex = TEXT_ZINDEX
+    
+    local tab = {
+        index = tabIndex,
+        id = tabId,
+        name = name,
+        tab = tabBg,
+        label = tabLabel,
+        indicator = indicator,
+        pos = Vector2.new(WINDOW_X + 10, tabY),
+        size = Vector2.new(TAB_WIDTH, TAB_HEIGHT),
+        items = {}
+    }
+    
+    -- Tab methods
+    function tab:CreateButton(config)
+        return UILib:CreateButton(self, config.Name, config.Callback)
     end
     
-    for _, corner in ipairs(self._base_corners or {}) do
-        corner:Remove()
+    function tab:CreateToggle(config)
+        return UILib:CreateToggle(self, config.Name, config.CurrentValue, config.Callback)
     end
+    
+    function tab:CreateSlider(config)
+        return UILib:CreateSlider(self, config.Name, config.Range[1], config.Range[2], 
+                                 config.CurrentValue, config.Increment, config.Callback)
+    end
+    
+    function tab:CreateDropdown(config)
+        return UILib:CreateDropdown(self, config.Name, config.Options, 
+                                   config.CurrentOption[1], config.Callback, config.MultipleOptions)
+    end
+    
+    function tab:CreateTextbox(config)
+        return UILib:CreateTextbox(self, config.Name, config.Default, 
+                                  config.PlaceholderText, config.ClearTextOnFocus, config.Callback)
+    end
+    
+    function tab:CreateColorPicker(config)
+        return UILib:CreateColorPicker(self, config.Name, config.Default, config.Callback)
+    end
+    
+    table.insert(self.tabs, tab)
+    
+    if not self.activeTab then
+        self.activeTab = tab
+        indicator.Visible = true
+    end
+    
+    return tab
+end
 
-    self:_RemoveDropdown()
-    self:_RemoveColorpicker()
+-- Button Creation
+function UILib:CreateButton(tab, text, callback)
+    local buttonId = "button_" .. #tab.items + 1
+    
+    local container = Drawing.new("Square")
+    container.Filled = true
+    container.Corner = 5
+    container.ZIndex = TEXT_ZINDEX
+    
+    local label = Drawing.new("Text")
+    label.Color = TEXT_COLOR
+    label.ZIndex = TEXT_ZINDEX + 1
+    
+    local button = {
+        type = "button",
+        id = buttonId,
+        container = container,
+        label = label,
+        callback = callback,
+        text = text,
+        containerPos = Vector2.new(0, 0),
+        containerSize = Vector2.new(CONTENT_WIDTH, CONTROL_HEIGHT),
+        isHovered = false
+    }
+    
+    table.insert(tab.items, button)
+    return button
+end
 
-    for _, tab in pairs(self._tree['_tabs']) do
-        if tab['_drawings'] then
-            for _, drawing in pairs(tab['_drawings']) do
-                drawing:Remove()
+-- Toggle Creation
+function UILib:CreateToggle(tab, text, initialState, callback)
+    local container = Drawing.new("Square")
+    container.Filled = true
+    container.Corner = 5
+    container.ZIndex = TEXT_ZINDEX
+    
+    local box = Drawing.new("Square")
+    box.Filled = true
+    box.Corner = 3
+    box.ZIndex = TEXT_ZINDEX + 1
+    
+    local fill = Drawing.new("Square")
+    fill.Filled = true
+    fill.Corner = 2
+    fill.ZIndex = TEXT_ZINDEX + 2
+    
+    local label = Drawing.new("Text")
+    label.Color = TEXT_COLOR
+    label.ZIndex = TEXT_ZINDEX + 1
+    
+    local toggle = {
+        type = "toggle",
+        container = container,
+        box = box,
+        fill = fill,
+        label = label,
+        state = initialState,
+        callback = callback,
+        text = text,
+        containerPos = Vector2.new(0, 0),
+        containerSize = Vector2.new(CONTENT_WIDTH, CONTROL_HEIGHT),
+        checkboxPos = Vector2.new(0, 0),
+        checkboxSize = Vector2.new(COLOR_PREVIEW_SIZE, COLOR_PREVIEW_SIZE)
+    }
+    
+    table.insert(tab.items, toggle)
+    return toggle
+end
+
+-- Slider Creation
+function UILib:CreateSlider(tab, text, min, max, currentValue, increment, callback)
+    local indicator = Drawing.new("Square")
+    indicator.Size = Vector2.new(10, 16)
+    indicator.Filled = true
+    indicator.Color = ACCENT_COLOR
+    indicator.Visible = false
+    indicator.Corner = 3
+    indicator.ZIndex = TEXT_ZINDEX + 3
+    
+    local container = Drawing.new("Square")
+    container.Filled = true
+    container.Corner = 5
+    container.ZIndex = TEXT_ZINDEX
+    
+    local bar = Drawing.new("Square")
+    bar.Filled = true
+    bar.Corner = 3
+    bar.ZIndex = TEXT_ZINDEX + 1
+    
+    local fill = Drawing.new("Square")
+    fill.Filled = true
+    fill.Corner = 3
+    fill.ZIndex = TEXT_ZINDEX + 2
+    
+    local label = Drawing.new("Text")
+    label.Color = TEXT_COLOR
+    label.ZIndex = TEXT_ZINDEX + 1
+    
+    local valueLabel = Drawing.new("Text")
+    valueLabel.Color = TEXT_COLOR
+    valueLabel.ZIndex = TEXT_ZINDEX + 1
+    
+    local slider = {
+        type = "slider",
+        container = container,
+        bar = bar,
+        fill = fill,
+        label = label,
+        valueLabel = valueLabel,
+        indicator = indicator,
+        min = min,
+        max = max,
+        value = currentValue,
+        step = increment,
+        callback = callback,
+        text = text,
+        containerPos = Vector2.new(0, 0),
+        containerSize = Vector2.new(CONTENT_WIDTH, CONTROL_HEIGHT),
+        sliderPos = Vector2.new(0, 0),
+        sliderSize = Vector2.new(SLIDER_WIDTH, 10)
+    }
+    
+    table.insert(tab.items, slider)
+    return slider
+end
+
+-- Main Update Loop
+function UILib:Step()
+    local mousePos = GetMousePosition()
+    local mouseClicked = false
+    
+    if ismouse1pressed() then
+        if not self.mouseDown then
+            mouseClicked = true
+        end
+        self.mouseDown = true
+    else
+        self.mouseDown = false
+    end
+    
+    -- Toggle UI with key
+    if self.toggleKey then
+        local keycode = KEYCODES[self.toggleKey:upper()]
+        if keycode and iskeypressed(keycode) and isrbxactive() then
+            UI_VISIBLE = not UI_VISIBLE
+            self:CloseAllDropdownsAndColorPickers()
+            self.base.Visible = UI_VISIBLE
+            self.title.Visible = UI_VISIBLE
+        end
+    end
+    
+    if not UI_VISIBLE then return end
+    
+    -- Update UI elements here...
+    -- (Implementation details for rendering buttons, toggles, sliders, etc.)
+end
+
+-- Cleanup
+function UILib:Destroy()
+    if self.base then self.base:Remove() end
+    if self.title then self.title:Remove() end
+    
+    for _, tab in ipairs(self.tabs) do
+        if tab.tab then tab.tab:Remove() end
+        if tab.label then tab.label:Remove() end
+        if tab.indicator then tab.indicator:Remove() end
+        
+        for _, item in ipairs(tab.items) do
+            if item.container then item.container:Remove() end
+            if item.label then item.label:Remove() end
+            
+            if item.type == "toggle" then
+                if item.box then item.box:Remove() end
+                if item.fill then item.fill:Remove() end
+            elseif item.type == "slider" then
+                if item.bar then item.bar:Remove() end
+                if item.fill then item.fill:Remove() end
+                if item.valueLabel then item.valueLabel:Remove() end
+                if item.indicator then item.indicator:Remove() end
             end
         end
+    end
+    
+    self.tabs = {}
+    self.activeTab = nil
+end
 
-        if tab._sections then
-            for _, section in pairs(tab['_sections']) do
-                for _, drawing in pairs(section['_drawings']) do
-                    drawing:Remove()
-                end
-                for _, corner in ipairs(section['_corners'] or {}) do
-                    corner:Remove()
-                end
-                
-                if section._items then
-                    for _, item in pairs(section._items) do
-                        for _, drawing in pairs(item['_drawings']) do
-                            drawing:Remove()
-                        end
-                    end
-                end
+function UILib:CloseAllDropdownsAndColorPickers()
+    for _, tab in ipairs(self.tabs) do
+        for _, item in ipairs(tab.items) do
+            if item.type == "dropdown" or item.type == "colorpicker" then
+                item.isOpen = false
             end
         end
     end
-
-    self._tree = nil
-    setrobloxinput(true)
 end
 
 return UILib
