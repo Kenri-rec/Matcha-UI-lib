@@ -1,388 +1,1641 @@
--- UILib - Beautified and Cleaned Version
--- Extracted from Arcane Hub
+UILib =
+    (function()
+    local lib = {}
+    lib.__index = lib
 
-local UILib = {}
-UILib.__index = UILib
-
--- Services
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
-
--- Utility Functions
-local function clamp(value, min, max)
-    if value < min then
-        return min
-    elseif value > max then
-        return max
-    else
-        return value
+    local function ease(t)
+        return t * t * (3 - 2 * t)
     end
-end
-
-local function GetMousePosition()
-    return Vector2.new(Mouse.X, Mouse.Y)
-end
-
-function UILib._IsMouseWithinBounds(position, size)
-    local mousePos = GetMousePosition()
-    return position and size and 
-           mousePos.X >= position.X and mousePos.X <= position.X + size.X and
-           mousePos.Y >= position.Y and mousePos.Y <= position.Y + size.Y
-end
-
--- Constants
-local UI_VISIBLE = true
-local WINDOW_X, WINDOW_Y = 200, 200
-local WINDOW_WIDTH, WINDOW_HEIGHT = 600, 350
-local TAB_WIDTH, TAB_HEIGHT = 100, 30
-local TAB_SPACING = 10
-local CONTENT_WIDTH = 420
-local CONTROL_HEIGHT = 35
-local SLIDER_WIDTH = 120
-local COLOR_PREVIEW_SIZE = 20
-local CHECKBOX_SIZE = 25
-
--- Colors
-local BACKGROUND_COLOR = Color3.fromRGB(20, 20, 20)
-local ACCENT_COLOR = Color3.fromRGB(106, 0, 255)
-local TAB_COLOR = Color3.fromRGB(30, 30, 30)
-local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
-local CONTROL_BG_COLOR = Color3.fromRGB(40, 40, 40)
-local HOVER_COLOR = Color3.fromRGB(50, 50, 50)
-
--- ZIndex Layers
-local BASE_ZINDEX = 1
-local WINDOW_ZINDEX = BASE_ZINDEX + 10
-local TAB_ZINDEX = WINDOW_ZINDEX + 10
-local TEXT_ZINDEX = TAB_ZINDEX + 10
-local HIGHEST_ZINDEX = 9999
-
--- Keycodes
-local KEYCODES = {
-    A = 0x41, B = 0x42, C = 0x43, D = 0x44, E = 0x45, F = 0x46, G = 0x47,
-    H = 0x48, I = 0x49, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E,
-    O = 0x4F, P = 0x50, Q = 0x51, R = 0x52, S = 0x53, T = 0x54, U = 0x55,
-    V = 0x56, W = 0x57, X = 0x58, Y = 0x59, Z = 0x5A,
-    M1 = 0x01, M2 = 0x02,
-    ["1"] = 0x31, ["2"] = 0x32, ["3"] = 0x33, ["4"] = 0x34, ["5"] = 0x35,
-    ["6"] = 0x36, ["7"] = 0x37, ["8"] = 0x38, ["9"] = 0x39, ["0"] = 0x30,
-    SHIFT = 0x10, RSHIFT = 0xA1, CONTROL = 0x11, RCONTROL = 0xA3,
-    BACKSPACE = 0x08, SPACE = 0x20, ENTER = 0x0D, TAB = 0x09, ESCAPE = 0x1B
-}
-
--- Window Creation
-function UILib:CreateWindow(config)
-    local self = setmetatable({}, UILib)
-    
-    self.tabs = {}
-    self.activeTab = nil
-    self.name = config.Name or "Window"
-    self.theme = config.Theme or "Default"
-    self.toggleKey = config.ToggleUIKeybind or "K"
-    self.minimized = false
-    self.notifications = {}
-    
-    -- Create window background
-    self.base = Drawing.new("Square")
-    self.base.Size = Vector2.new(WINDOW_WIDTH, WINDOW_HEIGHT)
-    self.base.Position = Vector2.new(WINDOW_X, WINDOW_Y)
-    self.base.Filled = true
-    self.base.Color = BACKGROUND_COLOR
-    self.base.Visible = UI_VISIBLE
-    self.base.Corner = 7
-    self.base.ZIndex = WINDOW_ZINDEX
-    
-    -- Create title
-    self.title = Drawing.new("Text")
-    self.title.Text = self.name
-    self.title.Position = Vector2.new(WINDOW_X + 10, WINDOW_Y + 10)
-    self.title.Color = TEXT_COLOR
-    self.title.Visible = UI_VISIBLE
-    self.title.ZIndex = TEXT_ZINDEX
-    
-    return self
-end
-
--- Tab Creation
-function UILib:CreateTab(name)
-    local tabIndex = #self.tabs + 1
-    local tabY = WINDOW_Y + 50 + (tabIndex - 1) * (TAB_HEIGHT + TAB_SPACING)
-    local tabId = "tab_" .. tabIndex
-    
-    -- Tab background
-    local tabBg = Drawing.new("Square")
-    tabBg.Size = Vector2.new(TAB_WIDTH, TAB_HEIGHT)
-    tabBg.Position = Vector2.new(WINDOW_X + 10, tabY)
-    tabBg.Filled = true
-    tabBg.Color = TAB_COLOR
-    tabBg.Visible = UI_VISIBLE
-    tabBg.Corner = 5
-    tabBg.ZIndex = TAB_ZINDEX
-    
-    -- Tab label
-    local tabLabel = Drawing.new("Text")
-    tabLabel.Text = name
-    tabLabel.Position = Vector2.new(WINDOW_X + 20, tabY + 8)
-    tabLabel.Color = TEXT_COLOR
-    tabLabel.Visible = UI_VISIBLE
-    tabLabel.ZIndex = TEXT_ZINDEX
-    
-    -- Active tab indicator
-    local indicator = Drawing.new("Square")
-    indicator.Size = Vector2.new(7, 20)
-    indicator.Position = Vector2.new(WINDOW_X + 10, tabY + 5)
-    indicator.Filled = true
-    indicator.Color = ACCENT_COLOR
-    indicator.Visible = false
-    indicator.Corner = 5
-    indicator.ZIndex = TEXT_ZINDEX
-    
-    local tab = {
-        index = tabIndex,
-        id = tabId,
-        name = name,
-        tab = tabBg,
-        label = tabLabel,
-        indicator = indicator,
-        pos = Vector2.new(WINDOW_X + 10, tabY),
-        size = Vector2.new(TAB_WIDTH, TAB_HEIGHT),
-        items = {}
-    }
-    
-    -- Tab methods
-    function tab:CreateButton(config)
-        return UILib:CreateButton(self, config.Name, config.Callback)
+    local function easeout(t)
+        return 1 - (1 - t) * (1 - t)
     end
-    
-    function tab:CreateToggle(config)
-        return UILib:CreateToggle(self, config.Name, config.CurrentValue, config.Callback)
-    end
-    
-    function tab:CreateSlider(config)
-        return UILib:CreateSlider(self, config.Name, config.Range[1], config.Range[2], 
-                                 config.CurrentValue, config.Increment, config.Callback)
-    end
-    
-    function tab:CreateDropdown(config)
-        return UILib:CreateDropdown(self, config.Name, config.Options, 
-                                   config.CurrentOption[1], config.Callback, config.MultipleOptions)
-    end
-    
-    function tab:CreateTextbox(config)
-        return UILib:CreateTextbox(self, config.Name, config.Default, 
-                                  config.PlaceholderText, config.ClearTextOnFocus, config.Callback)
-    end
-    
-    function tab:CreateColorPicker(config)
-        return UILib:CreateColorPicker(self, config.Name, config.Default, config.Callback)
-    end
-    
-    table.insert(self.tabs, tab)
-    
-    if not self.activeTab then
-        self.activeTab = tab
-        indicator.Visible = true
-    end
-    
-    return tab
-end
-
--- Button Creation
-function UILib:CreateButton(tab, text, callback)
-    local buttonId = "button_" .. #tab.items + 1
-    
-    local container = Drawing.new("Square")
-    container.Filled = true
-    container.Corner = 5
-    container.ZIndex = TEXT_ZINDEX
-    
-    local label = Drawing.new("Text")
-    label.Color = TEXT_COLOR
-    label.ZIndex = TEXT_ZINDEX + 1
-    
-    local button = {
-        type = "button",
-        id = buttonId,
-        container = container,
-        label = label,
-        callback = callback,
-        text = text,
-        containerPos = Vector2.new(0, 0),
-        containerSize = Vector2.new(CONTENT_WIDTH, CONTROL_HEIGHT),
-        isHovered = false
-    }
-    
-    table.insert(tab.items, button)
-    return button
-end
-
--- Toggle Creation
-function UILib:CreateToggle(tab, text, initialState, callback)
-    local container = Drawing.new("Square")
-    container.Filled = true
-    container.Corner = 5
-    container.ZIndex = TEXT_ZINDEX
-    
-    local box = Drawing.new("Square")
-    box.Filled = true
-    box.Corner = 3
-    box.ZIndex = TEXT_ZINDEX + 1
-    
-    local fill = Drawing.new("Square")
-    fill.Filled = true
-    fill.Corner = 2
-    fill.ZIndex = TEXT_ZINDEX + 2
-    
-    local label = Drawing.new("Text")
-    label.Color = TEXT_COLOR
-    label.ZIndex = TEXT_ZINDEX + 1
-    
-    local toggle = {
-        type = "toggle",
-        container = container,
-        box = box,
-        fill = fill,
-        label = label,
-        state = initialState,
-        callback = callback,
-        text = text,
-        containerPos = Vector2.new(0, 0),
-        containerSize = Vector2.new(CONTENT_WIDTH, CONTROL_HEIGHT),
-        checkboxPos = Vector2.new(0, 0),
-        checkboxSize = Vector2.new(COLOR_PREVIEW_SIZE, COLOR_PREVIEW_SIZE)
-    }
-    
-    table.insert(tab.items, toggle)
-    return toggle
-end
-
--- Slider Creation
-function UILib:CreateSlider(tab, text, min, max, currentValue, increment, callback)
-    local indicator = Drawing.new("Square")
-    indicator.Size = Vector2.new(10, 16)
-    indicator.Filled = true
-    indicator.Color = ACCENT_COLOR
-    indicator.Visible = false
-    indicator.Corner = 3
-    indicator.ZIndex = TEXT_ZINDEX + 3
-    
-    local container = Drawing.new("Square")
-    container.Filled = true
-    container.Corner = 5
-    container.ZIndex = TEXT_ZINDEX
-    
-    local bar = Drawing.new("Square")
-    bar.Filled = true
-    bar.Corner = 3
-    bar.ZIndex = TEXT_ZINDEX + 1
-    
-    local fill = Drawing.new("Square")
-    fill.Filled = true
-    fill.Corner = 3
-    fill.ZIndex = TEXT_ZINDEX + 2
-    
-    local label = Drawing.new("Text")
-    label.Color = TEXT_COLOR
-    label.ZIndex = TEXT_ZINDEX + 1
-    
-    local valueLabel = Drawing.new("Text")
-    valueLabel.Color = TEXT_COLOR
-    valueLabel.ZIndex = TEXT_ZINDEX + 1
-    
-    local slider = {
-        type = "slider",
-        container = container,
-        bar = bar,
-        fill = fill,
-        label = label,
-        valueLabel = valueLabel,
-        indicator = indicator,
-        min = min,
-        max = max,
-        value = currentValue,
-        step = increment,
-        callback = callback,
-        text = text,
-        containerPos = Vector2.new(0, 0),
-        containerSize = Vector2.new(CONTENT_WIDTH, CONTROL_HEIGHT),
-        sliderPos = Vector2.new(0, 0),
-        sliderSize = Vector2.new(SLIDER_WIDTH, 10)
-    }
-    
-    table.insert(tab.items, slider)
-    return slider
-end
-
--- Main Update Loop
-function UILib:Step()
-    local mousePos = GetMousePosition()
-    local mouseClicked = false
-    
-    if ismouse1pressed() then
-        if not self.mouseDown then
-            mouseClicked = true
+    local function lerp(a, b, t, easing)
+        if easing then
+            t = easing(t)
         end
-        self.mouseDown = true
-    else
-        self.mouseDown = false
-    end
-    
-    -- Toggle UI with key
-    if self.toggleKey then
-        local keycode = KEYCODES[self.toggleKey:upper()]
-        if keycode and iskeypressed(keycode) and isrbxactive() then
-            UI_VISIBLE = not UI_VISIBLE
-            self:CloseAllDropdownsAndColorPickers()
-            self.base.Visible = UI_VISIBLE
-            self.title.Visible = UI_VISIBLE
+        if type(a) == "number" then
+            return a + (b - a) * t
+        elseif type(a) == "Color3" then
+            return Color3.fromRGB(
+                math.floor(a.r * 255 + (b.r * 255 - a.r * 255) * t + 0.5),
+                math.floor(a.g * 255 + (b.g * 255 - a.g * 255) * t + 0.5),
+                math.floor(a.b * 255 + (b.b * 255 - a.b * 255) * t + 0.5)
+            )
         end
+        return a
     end
-    
-    if not UI_VISIBLE then return end
-    
-    -- Update UI elements here...
-    -- (Implementation details for rendering buttons, toggles, sliders, etc.)
-end
 
--- Cleanup
-function UILib:Destroy()
-    if self.base then self.base:Remove() end
-    if self.title then self.title:Remove() end
+    local vk = {TAB=0x09,F1=0x70,F2=0x71,F3=0x72,F4=0x73,F5=0x74,F6=0x75,F7=0x76,F8=0x77,F9=0x78,F10=0x79,F11=0x7A,F12=0x7B,HOME=0x24,END=0x23,INSERT=0x2D,DELETE=0x2E,PAGEUP=0x21,PAGEDOWN=0x22,ESCAPE=0x1B,SPACE=0x20,ENTER=0x0D,BACKSPACE=0x08,A=0x41,B=0x42,C=0x43,D=0x44,E=0x45,F=0x46,G=0x47,H=0x48,I=0x49,J=0x4A,K=0x4B,L=0x4C,M=0x4D,N=0x4E,O=0x4F,P=0x50,Q=0x51,R=0x52,S=0x53,T=0x54,U=0x55,V=0x56,W=0x57,X=0x58,Y=0x59,Z=0x5A,LEFT=0x25,RIGHT=0x27,UP=0x26,DOWN=0x28,LEFTCTRL=0xA2,RIGHTCTRL=0xA3,LEFTSHIFT=0xA0,RIGHTSHIFT=0xA1,LEFTALT=0xA4,RIGHTALT=0xA5,LSHIFT=0xA0,RSHIFT=0xA1,LCONTROL=0xA2,RCONTROL=0xA3,LALT=0xA4,RALT=0xA5,SHIFT=0x10,CONTROL=0x11,ALT=0x12,CAPSLOCK=0x14,NUMLOCK=0x90,SCROLLLOCK=0x91,PRINTSCREEN=0x2C,PAUSE=0x13,APPS=0x5D,LWIN=0x5B,RWIN=0x5C,SLEEP=0x5F,NUMPAD0=0x60,NUMPAD1=0x61,NUMPAD2=0x62,NUMPAD3=0x63,NUMPAD4=0x64,NUMPAD5=0x65,NUMPAD6=0x66,NUMPAD7=0x67,NUMPAD8=0x68,NUMPAD9=0x69,MULTIPLY=0x6A,ADD=0x6B,SEPARATOR=0x6C,SUBTRACT=0x6D,DECIMAL=0x6E,DIVIDE=0x6F,BROWSER_BACK=0xA6,BROWSER_FORWARD=0xA7,BROWSER_REFRESH=0xA8,BROWSER_STOP=0xA9,BROWSER_SEARCH=0xAA,BROWSER_FAVORITES=0xAB,BROWSER_HOME=0xAC,VOLUME_MUTE=0xAD,VOLUME_DOWN=0xAE,VOLUME_UP=0xAF,MEDIA_NEXT_TRACK=0xB0,MEDIA_PREV_TRACK=0xB1,MEDIA_STOP=0xB2,MEDIA_PLAY_PAUSE=0xB3,LAUNCH_MAIL=0xB4,LAUNCH_MEDIA_SELECT=0xB5,LAUNCH_APP1=0xB6,LAUNCH_APP2=0xB7,OEMPLUS=0xBB,OEMCOMMA=0xBC,OEMMINUS=0xBD,OEMPERIOD=0xBE,OEM1=0xBA,OEM2=0xBF,OEM3=0xC0,OEM4=0xDB,OEM5=0xDC,OEM6=0xDD,OEM7=0xDE,OEM8=0xDF,OEM102=0xE2,PROCESSKEY=0xE5,PACKET=0xE7,ATTN=0xF6,CRSEL=0xF7,EXSEL=0xF8,EREOF=0xF9,PLAY=0xFA,ZOOM=0xFB,NONAME=0xFC,PA1=0xFD,OEMCLEAR=0xFE}
     
-    for _, tab in ipairs(self.tabs) do
-        if tab.tab then tab.tab:Remove() end
-        if tab.label then tab.label:Remove() end
-        if tab.indicator then tab.indicator:Remove() end
+    for i = 48, 57 do
+        vk[tostring(i - 48)] = i
+    end
+    local getvk = function(k)
+        return vk[tostring(k):upper()]
+    end
+    local keydelay, animspeed, keybinds = {}, 0.09, {}
+
+    local c = {
+        frame = Color3.fromRGB(5, 6, 9),
+        frameaccent = Color3.fromRGB(10, 11, 14),
+        titletext = Color3.fromRGB(250, 252, 255),
+        iconcolor = Color3.fromRGB(51, 153, 230),
+        tabdefault = Color3.fromRGB(140, 145, 153),
+        tabhover = Color3.fromRGB(217, 222, 230),
+        tabactive = Color3.fromRGB(250, 252, 255),
+        tabaccent = Color3.fromRGB(38, 140, 217),
+        separator = Color3.fromRGB(20, 22, 24),
+        labeltext = Color3.fromRGB(230, 235, 242),
+        buttontext = Color3.fromRGB(217, 222, 230),
+        buttonhover = Color3.fromRGB(242, 247, 255),
+        buttonactive = Color3.fromRGB(38, 140, 217),
+        checkboxborder = Color3.fromRGB(64, 69, 77),
+        checkboxhover = Color3.fromRGB(115, 128, 140),
+        checkboxtick = Color3.fromRGB(38, 140, 217),
+        sliderbar = Color3.fromRGB(38, 41, 48),
+        sliderfill = Color3.fromRGB(38, 140, 217),
+        textboxbg = Color3.fromRGB(8, 9, 11),
+        textboxtext = Color3.fromRGB(230, 235, 242),
+        textboxfocus = Color3.fromRGB(38, 140, 217),
+        textboxborder = Color3.fromRGB(31, 36, 41),
+        textboxfocusborder = Color3.fromRGB(38, 140, 217),
+        keybindlistening = Color3.fromRGB(230, 115, 38),
+        closebtn = Color3.fromRGB(235, 71, 66),
+        closebtnhover = Color3.fromRGB(245, 102, 97),
+        minimizebtn = Color3.fromRGB(245, 179, 31),
+        minimizebtnhover = Color3.fromRGB(250, 199, 71),
+        playerfill = Color3.fromRGB(20, 24, 31),
+        playerborder = Color3.fromRGB(31, 41, 51),
+        autocompletetext = Color3.fromRGB(128, 133, 140),
+        dropdownbg = Color3.fromRGB(6, 8, 10),
+        dropdownhover = Color3.fromRGB(15, 18, 20),
+        glowcolor = Color3.fromRGB(51, 153, 230),
+        bluehighlight = Color3.fromRGB(51, 153, 230),
+        keybindbg = Color3.fromRGB(10, 13, 18),
+        keybindborder = Color3.fromRGB(46, 51, 61),
+        keybindtext = Color3.fromRGB(217, 222, 230)
+    }
+
+    local function newdraw(t)
+        if not Drawing or not Drawing.new then
+            return nil
+        end
+        local success, result = pcall(function()
+            return Drawing.new(t)
+        end)
+        if not success then
+            return nil
+        end
+        result.Visible = false
+        return result
+    end
+    local function textwidth(text, size)
+        return #text * (size * 0.58)
+    end
+
+    function lib.new(title)
+        local self =
+            setmetatable(
+            {
+                uiscale = 1.0,
+                bv = {
+                    w = 350,
+                    h = 220,
+                    minheight = 22,
+                    maxheight = 220,
+                    titleh = 22,
+                    tabw = 65,
+                    itemh = 21,
+                    spacey = 2,
+                    padding = 7,
+                    btnsize = 9,
+                    btnspacing = 5,
+                    btnpadding = 8,
+                    iconpadding = 7,
+                    mountainiconheight = 11,
+                    mountainiconbasewidth = 14,
+                    estimated_text_height = 11,
+                    control_box_h = 15,
+                    checkbox_size = 13,
+                    slider_bar_h = 7,
+                    keybind_min_w = 20,
+                    keybind_h = 13,
+                    frame_corner = 8,
+                    button_corner = 5,
+                    checkbox_corner = 3,
+                    dropdown_option_h = 16,
+                    frameaccent_thickness = 1,
+                    iconline_thickness = 1.5,
+                    textboxborder_thickness = 1,
+                    numGlowLayers = 8,
+                    glowOffsetIncrement = 1.2,
+                    glowBaseTransparency = 0.12,
+                    glowTransparencyDecrement = 0.018
+                },
+                title = title or "ui",
+                x = 200,
+                y = 150,
+                targetx = 200,
+                targety = 150,
+                activetab = 1,
+                unloaded = false,
+                dragging = false,
+                dragoffset = Vector2.new(0, 0),
+                minimized = false,
+                m1held = false,
+                clickframe = false,
+                hidden = false,
+                hidekeystr = "F1",
+                hidekeyvk = vk.F1,
+                animselectedtaby = 0,
+                targetselectedtaby = 0,
+                animclosecolor = c.closebtn,
+                animminimizecolor = c.minimizebtn,
+                draws = {},
+                dropdowndrawings = {},
+                tabs = {}
+            },
+            lib
+        )
+
+        local d = self.draws
+        d.glowLayers = {}
+        for i = 1, self.bv.numGlowLayers do
+            d.glowLayers[i] = newdraw("Square")
+            if d.glowLayers[i] then
+                d.glowLayers[i].Filled = true
+                d.glowLayers[i].Color = c.glowcolor
+            end
+        end
+        d.frame = newdraw("Square")
+        if d.frame then
+            d.frame.Filled = true
+            d.frame.Color = c.frame
+        end
         
-        for _, item in ipairs(tab.items) do
-            if item.container then item.container:Remove() end
-            if item.label then item.label:Remove() end
+        d.frameaccent = newdraw("Square")
+        if d.frameaccent then
+            d.frameaccent.Filled = false
+            d.frameaccent.Color = c.frameaccent
+        end
+
+        d.titleparts = {}
+        local pos = 1
+        local iterations = 0
+        while pos <= #self.title and iterations < 100 do
+            iterations = iterations + 1
+            local mpos = string.find(self.title, "MatchaHub", pos, true)
+            if mpos then
+                if mpos > pos then
+                    local txt = newdraw("Text")
+                    txt.Color = c.titletext
+                    txt.Text = string.sub(self.title, pos, mpos - 1)
+                    table.insert(
+                        d.titleparts,
+                        {text = string.sub(self.title, pos, mpos - 1), color = c.titletext, obj = txt}
+                    )
+                end
+                local txt2 = newdraw("Text")
+                txt2.Color = c.bluehighlight
+                txt2.Text = "MatchaHub"
+                table.insert(d.titleparts, {text = "MatchaHub", color = c.bluehighlight, obj = txt2})
+                pos = mpos + 9
+            else
+                local remaining = string.sub(self.title, pos)
+                if #remaining > 0 then
+                    local txt3 = newdraw("Text")
+                    txt3.Color = c.titletext
+                    txt3.Text = remaining
+                    table.insert(d.titleparts, {text = remaining, color = c.titletext, obj = txt3})
+                end
+                break
+            end
+        end
+
+        d.sep = newdraw("Line")
+        d.sep.Color = c.separator
+        d.accenttab = newdraw("Line")
+        d.accenttab.Color = c.tabaccent
+        d.accenttitle = newdraw("Line")
+        d.accenttitle.Color = c.separator
+        for i = 1, 4 do
+            d["iconline" .. i] = newdraw("Line")
+            d["iconline" .. i].Color = c.iconcolor
+        end
+        d.closebtn = newdraw("Square")
+        d.closebtn.Filled = true
+        d.closebtn.Color = c.closebtn
+        d.minimizebtn = newdraw("Square")
+        d.minimizebtn.Filled = true
+        d.minimizebtn.Color = c.minimizebtn
+
+        self.h = self.bv.maxheight * self.uiscale
+        return self
+    end
+
+    function lib:hide()
+        self.hidden = true
+    end
+    function lib:show()
+        self.hidden = false
+    end
+    function lib:toggle()
+        self.hidden = not self.hidden
+    end
+    function lib:minimize()
+        self.minimized = true
+    end
+    function lib:maximize()
+        self.minimized = false
+    end
+    function lib:setposition(x, y)
+        self.targetx, self.targety = x or self.targetx, y or self.targety
+    end
+    function lib:setscale(scale)
+        if scale and scale >= 0.5 and scale <= 2.0 then
+            self.uiscale = scale
+        end
+    end
+    function lib:settitle(title)
+        self.title = title or self.title
+    end
+    function lib:setproperty(prop, value)
+        if prop == "hidden" then
+            self.hidden = value
+        elseif prop == "minimized" then
+            self.minimized = value
+        elseif prop == "scale" then
+            self:setscale(value)
+        elseif prop == "title" then
+            self:settitle(value)
+        elseif prop == "x" then
+            self.targetx = value
+        elseif prop == "y" then
+            self.targety = value
+        end
+    end
+    function lib:sethidekey(s)
+        self.hidekeystr = tostring(s)
+        self.hidekeyvk = getvk(s) or vk.F1
+    end
+
+    function lib:addtab(name)
+        local t = {
+            name = name or "Tab",
+            items = {},
+            drawsep = newdraw("Line"),
+            draw = newdraw("Text"),
+            animtextcolor = c.tabdefault
+        }
+        t.drawsep.Color = c.separator
+        t.draw.Color = t.animtextcolor
+        table.insert(self.tabs, t)
+        return #self.tabs
+    end
+
+    function lib:addlabel(tabidx, text)
+        local t = self.tabs[tabidx]
+        local item = {type = "label", label = text or "", draw = newdraw("Text")}
+        item.draw.Color = c.labeltext
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addbutton(tabidx, label, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "button",
+            label = label or "Button",
+            cb = cb,
+            draw = newdraw("Text"),
+            animtextcolor = c.buttontext,
+            pressedvisualtime = 0,
+            hoveranim = 0,
+            targethover = 0
+        }
+        item.draw.Color = item.animtextcolor
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addcheck(tabidx, label, v, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "checkbox",
+            label = label or "Checkbox",
+            val = v,
+            cb = cb,
+            drawbox = newdraw("Square"),
+            drawfill = newdraw("Square"),
+            draw = newdraw("Text"),
+            anim = v and 1 or 0,
+            target = v and 1 or 0,
+            animbordercolor = c.checkboxborder,
+            animlabelcolor = c.labeltext,
+            hoveranim = 0,
+            targethover = 0
+        }
+        item.drawbox.Color = item.animbordercolor
+        item.draw.Color = item.animlabelcolor
+        item.drawfill.Color = c.checkboxtick
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addslider(tabidx, label, defaultvalue, step, min, max, unit, callback)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "slider",
+            label = label,
+            value = defaultvalue,
+            cb = callback,
+            drawbox = newdraw("Square"),
+            drawfill = newdraw("Square"),
+            drawtext = newdraw("Text"),
+            step = step,
+            min = min,
+            max = max,
+            unit = unit or "",
+            animbarcolor = c.sliderbar,
+            animfillcolor = c.sliderfill,
+            animlabelcolor = c.labeltext,
+            animfrac = (max - min) ~= 0 and (defaultvalue - min) / (max - min) or 0,
+            hoveranim = 0,
+            targethover = 0
+        }
+        item.drawbox.Filled = true
+        item.drawfill.Filled = true
+        item.drawbox.Color = item.animbarcolor
+        item.drawfill.Color = item.animfillcolor
+        item.drawtext.Color = item.animlabelcolor
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addscalebox(tabidx, label, defaultval, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "scalebox",
+            label = label,
+            value = tostring(defaultval or self.uiscale),
+            cb = cb,
+            drawbox = newdraw("Square"),
+            drawborder = newdraw("Square"),
+            drawlabel = newdraw("Text"),
+            drawval = newdraw("Text"),
+            edit = false,
+            cursorblink = 0,
+            animboxbgcolor = c.textboxbg,
+            animlabelcolor = c.labeltext,
+            animbordercolor = c.textboxborder,
+            hoveranim = 0,
+            targethover = 0,
+            focusanim = 0,
+            targetfocus = 0
+        }
+        item.drawbox.Filled = true
+        item.drawborder.Filled = false
+        item.drawbox.Color = item.animboxbgcolor
+        item.drawborder.Color = item.animbordercolor
+        item.drawlabel.Color = item.animlabelcolor
+        item.drawval.Color = c.textboxtext
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addtextbox(tabidx, label, defaulttext, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "textbox",
+            label = label,
+            value = defaulttext or "",
+            cb = cb,
+            drawbox = newdraw("Square"),
+            drawborder = newdraw("Square"),
+            drawlabel = newdraw("Text"),
+            drawval = newdraw("Text"),
+            edit = false,
+            cursorblink = 0,
+            animboxbgcolor = c.textboxbg,
+            animlabelcolor = c.labeltext,
+            animbordercolor = c.textboxborder,
+            hoveranim = 0,
+            targethover = 0,
+            focusanim = 0,
+            targetfocus = 0
+        }
+        item.drawbox.Filled = true
+        item.drawborder.Filled = false
+        item.drawbox.Color = item.animboxbgcolor
+        item.drawborder.Color = item.animbordercolor
+        item.drawlabel.Color = item.animlabelcolor
+        item.drawval.Color = c.textboxtext
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addplayerbox(tabidx, label, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "playerbox",
+            label = label,
+            value = "",
+            cb = cb,
+            drawbox = newdraw("Square"),
+            drawborder = newdraw("Square"),
+            drawlabel = newdraw("Text"),
+            drawval = newdraw("Text"),
+            drawautocomplete = newdraw("Text"),
+            edit = false,
+            cursorblink = 0,
+            autocomplete = "",
+            animboxbgcolor = c.textboxbg,
+            animlabelcolor = c.labeltext,
+            animbordercolor = c.playerborder,
+            hoveranim = 0,
+            targethover = 0,
+            focusanim = 0,
+            targetfocus = 0
+        }
+        item.drawbox.Filled = true
+        item.drawborder.Filled = false
+        item.drawbox.Color = item.animboxbgcolor
+        item.drawborder.Color = item.animbordercolor
+        item.drawlabel.Color = item.animlabelcolor
+        item.drawval.Color = c.textboxtext
+        item.drawautocomplete.Color = c.autocompletetext
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addhidebox(tabidx, label, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "hidekeybind",
+            label = label or "Hide Key",
+            value = self.hidekeystr,
+            cb = cb,
+            listening = false,
+            drawlabel = newdraw("Text"),
+            drawbox = newdraw("Square"),
+            drawborder = newdraw("Square"),
+            drawval = newdraw("Text"),
+            animboxbgcolor = c.keybindbg,
+            animlabelcolor = c.labeltext,
+            animbordercolor = c.keybindborder,
+            hoveranim = 0,
+            targethover = 0,
+            listeninganim = 0,
+            targetlistening = 0
+        }
+        item.drawbox.Filled = true
+        item.drawborder.Filled = false
+        item.drawbox.Color = item.animboxbgcolor
+        item.drawborder.Color = item.animbordercolor
+        item.drawlabel.Color = item.animlabelcolor
+        item.drawval.Color = c.keybindtext
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:addkeybind(tabidx, label, defaultkey, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "keybind",
+            label = label or "Keybind",
+            value = defaultkey or "NONE",
+            cb = cb,
+            listening = false,
+            drawlabel = newdraw("Text"),
+            drawbox = newdraw("Square"),
+            drawborder = newdraw("Square"),
+            drawval = newdraw("Text"),
+            animboxbgcolor = c.keybindbg,
+            animlabelcolor = c.labeltext,
+            animbordercolor = c.keybindborder,
+            hoveranim = 0,
+            targethover = 0,
+            listeninganim = 0,
+            targetlistening = 0
+        }
+        item.drawbox.Filled = true
+        item.drawborder.Filled = false
+        item.drawbox.Color = item.animboxbgcolor
+        item.drawborder.Color = item.animbordercolor
+        item.drawlabel.Color = item.animlabelcolor
+        item.drawval.Color = c.keybindtext
+        if defaultkey and defaultkey ~= "NONE" then
+            keybinds[#keybinds + 1] = {key = defaultkey, vk = getvk(defaultkey), cb = cb}
+        end
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:adddropdown(tabidx, label, options, defaultvalue, cb)
+        local t = self.tabs[tabidx]
+        local item = {
+            type = "dropdown",
+            label = label,
+            options = options or {},
+            value = defaultvalue or "",
+            cb = cb,
+            drawlabel = newdraw("Text"),
+            drawbox = newdraw("Square"),
+            drawborder = newdraw("Square"),
+            drawval = newdraw("Text"),
+            drawarrow = newdraw("Text"),
+            open = false,
+            animboxbgcolor = c.textboxbg,
+            animlabelcolor = c.labeltext,
+            animbordercolor = c.textboxborder,
+            openanimation = 0,
+            targetopenanimation = 0,
+            hoveranim = 0,
+            targethover = 0
+        }
+        item.drawbox.Filled = true
+        item.drawborder.Filled = false
+        item.drawbox.Color = item.animboxbgcolor
+        item.drawborder.Color = item.animbordercolor
+        item.drawlabel.Color = item.animlabelcolor
+        item.drawval.Color = c.textboxtext
+        item.drawarrow.Color = c.textboxtext
+        table.insert(t.items, item)
+        return #t.items
+    end
+
+    function lib:createdropdownitems()
+        for _, t in ipairs(self.tabs) do
+            for _, item in ipairs(t.items) do
+                if item.type == "dropdown" and not item.dropdownitems then
+                    item.dropdownitems = {}
+                    for _, opt in ipairs(item.options) do
+                        local optitem = {
+                            drawbg = newdraw("Square"),
+                            drawtext = newdraw("Text"),
+                            hoveranim = 0,
+                            targethover = 0
+                        }
+                        optitem.drawbg.Filled = true
+                        optitem.drawbg.Corner = 2 * self.uiscale
+                        optitem.drawbg.Color = c.dropdownbg
+                        optitem.drawtext.Color = c.textboxtext
+                        optitem.drawtext.Text = opt
+                        table.insert(item.dropdownitems, optitem)
+                        table.insert(self.dropdowndrawings, optitem.drawbg)
+                        table.insert(self.dropdowndrawings, optitem.drawtext)
+                    end
+                end
+            end
+        end
+    end
+
+    local function getplayerautocomplete(input)
+        if #input == 0 then
+            return "", ""
+        end
+        local players = game:GetService("Players"):GetPlayers()
+        for _, player in ipairs(players) do
+            if player.Name:lower():sub(1, #input) == input:lower() then
+                return player.Name:sub(#input + 1), player.Name
+            end
+        end
+        return "", ""
+    end
+
+    function lib:runui()
+        local success, err = pcall(function()
+            if not self._lastframe then self._lastframe = 0 end
+            local now = os.clock()
+            if now - self._lastframe < 0.008 then return end
+            self._lastframe = now
             
-            if item.type == "toggle" then
-                if item.box then item.box:Remove() end
-                if item.fill then item.fill:Remove() end
-            elseif item.type == "slider" then
-                if item.bar then item.bar:Remove() end
-                if item.fill then item.fill:Remove() end
-                if item.valueLabel then item.valueLabel:Remove() end
-                if item.indicator then item.indicator:Remove() end
+            if not self._lastvalidation then self._lastvalidation = 0 end
+            if now - self._lastvalidation > 10 then
+                pcall(function()
+                    for _, tab in ipairs(self.tabs or {}) do
+                        if tab and tab.items then
+                            for _, it in ipairs(tab.items) do
+                                if it and it.draw and it.draw.Remove then
+                                    local ok = pcall(function()
+                                        local _ = it.draw.Visible
+                                    end)
+                                    if not ok then
+                                        it.draw = nil
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+                self._lastvalidation = now
+            end
+            
+            for vk_code, time in pairs(keydelay) do
+                if time <= 0 then
+                    keydelay[vk_code] = nil
+                else
+                    keydelay[vk_code] = time - 1
+                end
+            end
+            
+            if not self._lastkeydelayclean then self._lastkeydelayclean = 0 end
+            if now - self._lastkeydelayclean > 5.0 then
+                local toremove = {}
+                for vk_code, time in pairs(keydelay) do
+                    if not time or time <= 0 then
+                        table.insert(toremove, vk_code)
+                    end
+                end
+                for _, vk_code in ipairs(toremove) do
+                    keydelay[vk_code] = nil
+                end
+                self._lastkeydelayclean = now
+            end
+            
+            if iskeypressed and iskeypressed(self.hidekeyvk) and not keydelay[self.hidekeyvk] then
+                self.hidden = not self.hidden
+                keydelay[self.hidekeyvk] = 20
+            end
+
+            for _, bind in ipairs(keybinds) do
+                if bind.vk and iskeypressed(bind.vk) and not keydelay[bind.vk] then
+                    if bind.cb then
+                        pcall(bind.cb)
+                    end
+                    keydelay[bind.vk] = 20
+                end
+            end
+
+            local d = self.draws
+            if self.unloaded then
+            for _, obj in pairs(d.glowLayers or {}) do
+                if obj and obj.Remove then
+                    pcall(
+                        function()
+                            obj:Remove()
+                        end
+                    )
+                end
+            end
+            for _, part in ipairs(d.titleparts or {}) do
+                if part.obj and part.obj.Remove then
+                    pcall(
+                        function()
+                            part.obj:Remove()
+                        end
+                    )
+                end
+            end
+            for name, obj in pairs(d) do
+                if name ~= "glowLayers" and name ~= "titleparts" and obj and obj.Remove then
+                    pcall(
+                        function()
+                            obj:Remove()
+                        end
+                    )
+                end
+            end
+            for _, obj in ipairs(self.dropdowndrawings or {}) do
+                if obj and obj.Remove then
+                    pcall(
+                        function()
+                            obj:Remove()
+                        end
+                    )
+                end
+            end
+            for _, t in ipairs(self.tabs or {}) do
+                if t.draw and t.draw.Remove then
+                    pcall(
+                        function()
+                            t.draw:Remove()
+                        end
+                    )
+                end
+                if t.drawsep and t.drawsep.Remove then
+                    pcall(
+                        function()
+                            t.drawsep:Remove()
+                        end
+                    )
+                end
+                for _, i in ipairs(t.items or {}) do
+                    for _, dn in ipairs(
+                        {
+                            "draw",
+                            "drawbox",
+                            "drawborder",
+                            "drawfill",
+                            "drawtext",
+                            "drawlabel",
+                            "drawval",
+                            "drawautocomplete",
+                            "drawarrow"
+                        }
+                    ) do
+                        if i[dn] and i[dn].Remove then
+                            pcall(
+                                function()
+                                    i[dn]:Remove()
+                                end
+                            )
+                        end
+                    end
+                    if i.dropdownitems then
+                        for _, di in ipairs(i.dropdownitems) do
+                            if di.drawbg and di.drawbg.Remove then
+                                pcall(
+                                    function()
+                                        di.drawbg:Remove()
+                                    end
+                                )
+                            end
+                            if di.drawtext and di.drawtext.Remove then
+                                pcall(
+                                    function()
+                                        di.drawtext:Remove()
+                                    end
+                                )
+                            end
+                        end
+                    end
+                end
+            end
+            return
+        end
+
+        if not self.dropdownscreated then
+            self:createdropdownitems()
+            self.dropdownscreated = true
+        end
+
+        local scale = self.uiscale
+        local bv = self.bv
+        local sw, sh = bv.w * scale, bv.h * scale
+        local titleh, tabw, itemh = bv.titleh * scale, bv.tabw * scale, bv.itemh * scale
+        local spacey, padding = bv.spacey * scale, bv.padding * scale
+        local btnsize, btnspacing, btnpadding = bv.btnsize * scale, bv.btnspacing * scale, bv.btnpadding * scale
+        local iconpadding, iconh, iconw =
+            bv.iconpadding * scale,
+            bv.mountainiconheight * scale,
+            bv.mountainiconbasewidth * scale
+        local texth = bv.estimated_text_height * scale
+        local boxh, checksize, sliderh = bv.control_box_h * scale, bv.checkbox_size * scale, bv.slider_bar_h * scale
+        local keybindminh = bv.keybind_h * scale
+        local cornerf, cornerb, cornerc = bv.frame_corner * scale, bv.button_corner * scale, bv.checkbox_corner * scale
+        local thickf, thicki, thickt =
+            math.max(1, bv.frameaccent_thickness * scale),
+            math.max(1, bv.iconline_thickness * scale),
+            math.max(1, bv.textboxborder_thickness * scale)
+        local dropdownh = bv.dropdown_option_h * scale
+
+        local function textw(s)
+            return textwidth(s, texth)
+        end
+        local visible = not self.hidden and not self.minimized
+
+        if self.hidden then
+            if not self._washidden then
+                for _, obj in pairs(d.glowLayers or {}) do
+                    pcall(function() if obj then obj.Visible = false end end)
+                end
+                for name, obj in pairs(d) do
+                    pcall(function() if name ~= "glowLayers" and obj then obj.Visible = false end end)
+                end
+                for _, part in ipairs(d.titleparts or {}) do
+                    pcall(function() if part.obj then part.obj.Visible = false end end)
+                end
+                for _, obj in ipairs(self.dropdowndrawings or {}) do
+                    pcall(function() if obj then obj.Visible = false end end)
+                end
+                for _, t in ipairs(self.tabs or {}) do
+                    pcall(function()
+                        if t.draw then t.draw.Visible = false end
+                        if t.drawsep then t.drawsep.Visible = false end
+                    end)
+                    for _, i in ipairs(t.items or {}) do
+                        pcall(function()
+                            for _, dn in ipairs({"draw","drawbox","drawborder","drawfill","drawtext","drawlabel","drawval","drawautocomplete","drawarrow"}) do
+                                if i[dn] then i[dn].Visible = false end
+                            end
+                            if i.dropdownitems then
+                                for _, di in ipairs(i.dropdownitems) do
+                                    if di.drawbg then di.drawbg.Visible = false end
+                                    if di.drawtext then di.drawtext.Visible = false end
+                                end
+                            end
+                        end)
+                    end
+                end
+                self._washidden = true
+            end
+            self.clickframe = false
+            return
+        end
+        self._washidden = false
+
+        d.frame.Visible = true
+        d.frameaccent.Visible = true
+        d.closebtn.Visible = true
+        d.minimizebtn.Visible = true
+        d.accenttitle.Visible = not self.minimized
+        pcall(function()
+            for i = 1, 4 do
+                if d["iconline" .. i] then
+                    d["iconline" .. i].Visible = true
+                end
+            end
+        end)
+        pcall(function()
+            for _, gl in ipairs(d.glowLayers or {}) do
+                if gl then
+                    gl.Visible = not self.minimized
+                end
+            end
+        end)
+
+        if not game or not game.GetService then
+            self.clickframe = false
+            return
+        end
+        
+        local mouseSuccess, mouse = pcall(function()
+            return game:GetService("Players").LocalPlayer:GetMouse()
+        end)
+        
+        if not mouseSuccess or not mouse then
+            self.clickframe = false
+            return
+        end
+        
+        local m = nil
+        pcall(function()
+            m = Vector2.new(mouse.X or 0, mouse.Y or 0)
+        end)
+        if not m then
+            self.clickframe = false
+            return
+        end
+        
+        if ismouse1pressed and ismouse1pressed() then
+            if not self.m1held then
+                self.clickframe = true
+            end
+            self.m1held = true
+        else
+            self.m1held = false
+        end
+
+        if self.dragging then
+            self.targetx = m.x - self.dragoffset.x
+            self.targety = m.y - self.dragoffset.y
+        end
+        
+        local oldx, oldy, oldh = self.x, self.y, self.h
+        local dragspeed = self.dragging and 0.75 or 0.25
+        self.x = lerp(self.x, self.targetx, dragspeed, easeout)
+        self.y = lerp(self.y, self.targety, dragspeed, easeout)
+        self.h = lerp(self.h, self.minimized and bv.minheight * scale or bv.maxheight * scale, animspeed * 3.0, ease)
+        
+        local moved = math.abs(oldx - self.x) > 0.5 or math.abs(oldy - self.y) > 0.5 or math.abs(oldh - self.h) > 0.5
+        
+        if moved or not self._glowupdated then
+            for i, glow in ipairs(d.glowLayers or {}) do
+                pcall(function()
+                    if glow then
+                        local offset = i * bv.glowOffsetIncrement * scale
+                        glow.Position = Vector2.new(self.x - offset, self.y - offset)
+                        glow.Size = Vector2.new(sw + offset * 2, self.h + offset * 2)
+                        glow.Transparency = math.max(0, bv.glowBaseTransparency - ((i - 1) * bv.glowTransparencyDecrement))
+                        glow.Corner = math.max(1, cornerf + (offset * 0.2))
+                    end
+                end)
+            end
+            self._glowupdated = true
+        end
+
+        pcall(function()
+            d.frame.Position = Vector2.new(self.x, self.y)
+            d.frame.Size = Vector2.new(sw, self.h)
+            d.frame.Corner = cornerf
+        end)
+        pcall(function()
+            d.frameaccent.Position = Vector2.new(self.x, self.y)
+            d.frameaccent.Size = Vector2.new(sw, self.h)
+            d.frameaccent.Corner = cornerf
+            d.frameaccent.Thickness = thickf
+        end)
+
+        local cx = self.x + sw - btnpadding - btnsize
+        local cy = self.y + (titleh - btnsize) / 2
+        local mx = cx - btnsize - btnspacing
+        local my = cy
+        local chov = m.x >= cx and m.x <= cx + btnsize and m.y >= cy and m.y <= cy + btnsize
+        local mhov = m.x >= mx and m.x <= mx + btnsize and m.y >= my and m.y <= my + btnsize
+        
+        if chov ~= self._lasthov1 or not self.animclosecolor then
+            self.animclosecolor = lerp(self.animclosecolor or c.closebtn, chov and c.closebtnhover or c.closebtn, animspeed * 3.0, easeout)
+            self._lasthov1 = chov
+        end
+        if mhov ~= self._lasthov2 or not self.animminimizecolor then
+            self.animminimizecolor = lerp(self.animminimizecolor or c.minimizebtn, mhov and c.minimizebtnhover or c.minimizebtn, animspeed * 3.0, easeout)
+            self._lasthov2 = mhov
+        end
+        
+        pcall(function()
+            d.closebtn.Position = Vector2.new(cx, my)
+            d.closebtn.Size = Vector2.new(btnsize, btnsize)
+            d.closebtn.Color = self.animclosecolor
+            d.closebtn.Corner = cornerb
+        end)
+        pcall(function()
+            d.minimizebtn.Position = Vector2.new(mx, my)
+            d.minimizebtn.Size = Vector2.new(btnsize, btnsize)
+            d.minimizebtn.Color = self.animminimizecolor
+            d.minimizebtn.Corner = cornerb
+        end)
+
+        if self.clickframe then
+            if chov then
+                self:killui()
+                return
+            elseif mhov then
+                self.minimized = not self.minimized
+                self.clickframe = false
             end
         end
-    end
-    
-    self.tabs = {}
-    self.activeTab = nil
-end
 
-function UILib:CloseAllDropdownsAndColorPickers()
-    for _, tab in ipairs(self.tabs) do
-        for _, item in ipairs(tab.items) do
-            if item.type == "dropdown" or item.type == "colorpicker" then
-                item.isOpen = false
+        local ix = self.x + padding
+        local iy = self.y + titleh / 2 + iconh / 2
+        local p0, p1, p2, p3, p4 =
+            Vector2.new(ix, iy),
+            Vector2.new(ix + iconw * 0.28, iy - iconh * 0.65),
+            Vector2.new(ix + iconw * 0.52, iy - iconh * 0.35),
+            Vector2.new(ix + iconw * 0.75, iy - iconh),
+            Vector2.new(ix + iconw, iy)
+        d.iconline1.From, d.iconline1.To = p0, p1
+        d.iconline2.From, d.iconline2.To = p1, p2
+        d.iconline3.From, d.iconline3.To = p2, p3
+        d.iconline4.From, d.iconline4.To = p3, p4
+        for i = 1, 4 do
+            d["iconline" .. i].Thickness = thicki
+        end
+
+        local title_x = ix + iconw + iconpadding
+        local title_y = self.y + (titleh - texth) / 2 - 1
+        local currentx = title_x
+        for _, part in ipairs(d.titleparts) do
+            if part.obj then
+                part.obj.Position = Vector2.new(currentx, title_y)
+                part.obj.Color = part.color
+                part.obj.Text = part.text
+                part.obj.Visible = true
+                currentx = currentx + textw(part.text)
             end
         end
-    end
-end
 
-return UILib
+        d.accenttitle.From, d.accenttitle.To =
+            Vector2.new(self.x, self.y + titleh - 1),
+            Vector2.new(self.x + sw, self.y + titleh - 1)
+
+        if m.x >= self.x and m.x <= (mx - padding) and m.y >= self.y and m.y <= self.y + titleh and self.clickframe then
+            self.dragging = true
+            self.dragoffset = Vector2.new(m.x - self.x, m.y - self.y)
+        end
+        if not self.m1held then
+            self.dragging = false
+        end
+
+        d.sep.Visible = visible
+        d.accenttab.Visible = visible
+        for _, t in ipairs(self.tabs) do
+            pcall(function()
+                if t.draw and t.draw.Visible ~= nil then
+                    t.draw.Visible = visible
+                end
+                if t.drawsep and t.drawsep.Visible ~= nil then
+                    t.drawsep.Visible = visible
+                end
+            end)
+        end
+        
+        if self.minimized then
+            for _, t in ipairs(self.tabs or {}) do
+                for _, i in ipairs(t.items or {}) do
+                    pcall(function()
+                        for _, dn in ipairs({"draw","drawbox","drawborder","drawfill","drawtext","drawlabel","drawval","drawautocomplete","drawarrow"}) do
+                            if i[dn] then i[dn].Visible = false end
+                        end
+                        if i.dropdownitems then
+                            for _, di in ipairs(i.dropdownitems) do
+                                if di.drawbg then di.drawbg.Visible = false end
+                                if di.drawtext then di.drawtext.Visible = false end
+                            end
+                        end
+                    end)
+                end
+            end
+            self.clickframe = false
+            return
+        end
+
+        if visible then
+            local sbx, sby, sbw = self.x, self.y + titleh, tabw
+            if #self.tabs > 0 and self.activetab >= 1 and self.activetab <= #self.tabs then
+                self.targetselectedtaby = sby + (self.activetab - 1) * (itemh + spacey)
+            end
+            for i, t in ipairs(self.tabs) do
+                local taby = sby + (i - 1) * (itemh + spacey)
+                local hov = m.x >= sbx and m.x <= sbx + sbw and m.y >= taby and m.y <= taby + itemh
+                if hov and self.clickframe and self.activetab ~= i then
+                    self.activetab = i
+                    self.targetselectedtaby = taby
+                end
+                t.animtextcolor =
+                    lerp(
+                    t.animtextcolor,
+                    self.activetab == i and c.tabactive or (hov and c.tabhover or c.tabdefault),
+                    animspeed * 2.5,
+                    easeout
+                )
+                pcall(function()
+                    if t.draw and t.draw.Position ~= nil then
+                        t.draw.Position = Vector2.new(sbx + padding, taby + (itemh - texth) / 2 - 1)
+                        t.draw.Text = t.name or ("Tab " .. i)
+                        t.draw.Color = t.animtextcolor
+                    end
+                    if t.drawsep and t.drawsep.Visible ~= nil then
+                        t.drawsep.Visible = (self.activetab ~= i)
+                        t.drawsep.From, t.drawsep.To =
+                            Vector2.new(sbx + 3 * scale, taby + itemh + 1),
+                            Vector2.new(sbx + sbw - 3 * scale, taby + itemh + 1)
+                    end
+                end)
+            end
+            self.animselectedtaby =
+                lerp(self.animselectedtaby, self.targetselectedtaby, self.dragging and 1 or (animspeed * 3.0), ease)
+            d.accenttab.From, d.accenttab.To =
+                Vector2.new(sbx, self.animselectedtaby + itemh + 1),
+                Vector2.new(sbx + sbw, self.animselectedtaby + itemh + 1)
+            d.sep.From, d.sep.To = Vector2.new(self.x + tabw, self.y + titleh), Vector2.new(self.x + tabw, self.y + self.h)
+
+            local x0 = self.x + tabw + padding
+            local w0 = sw - tabw - padding * 2
+            local labelw = 155 * scale
+            local item_text_y_offset = (itemh - texth) / 2 - 1
+            local control_y_offset = (itemh - boxh) / 2
+            local text_in_box_y_offset = (boxh - texth) / 2 - 1
+
+            for tI, t in ipairs(self.tabs) do
+                for iI, it in ipairs(t.items) do
+                    local act = (tI == self.activetab)
+                    local ypos = self.y + titleh + (iI - 1) * (itemh + spacey) + padding
+                    for _, dn in ipairs(
+                        {
+                            "draw",
+                            "drawbox",
+                            "drawborder",
+                            "drawfill",
+                            "drawtext",
+                            "drawlabel",
+                            "drawval",
+                            "drawautocomplete",
+                            "drawarrow"
+                        }
+                    ) do
+                        if it[dn] then
+                            it[dn].Visible = act
+                        end
+                    end
+
+                    local text_y = ypos + item_text_y_offset
+                    local box_y = ypos + control_y_offset
+                    local text_in_box_y = box_y + text_in_box_y_offset
+
+                    if it.type == "label" and act then
+                        pcall(function()
+                            if it.draw and it.draw.Position ~= nil then
+                                it.draw.Position = Vector2.new(x0, text_y)
+                                it.draw.Text = it.label
+                                it.draw.Color = c.labeltext
+                            end
+                        end)
+                    elseif it.type == "button" and act then
+                        local hov = m.x >= x0 and m.x <= x0 + w0 and m.y >= ypos and m.y <= ypos + itemh
+                        it.targethover = hov and 1 or 0
+                        if it.targethover ~= (it._lasthover or 0) or it.pressedvisualtime > 0 then
+                            it.hoveranim = lerp(it.hoveranim or 0, it.targethover, animspeed * 25.0, easeout)
+                            it._lasthover = it.targethover
+                            local tcol = c.buttontext
+                            if it.pressedvisualtime > 0 then
+                                tcol = c.buttonactive
+                                it.pressedvisualtime = it.pressedvisualtime - 1
+                            else
+                                tcol = lerp(c.buttontext, c.buttonhover, it.hoveranim, easeout)
+                            end
+                            it.animtextcolor = lerp(it.animtextcolor, tcol, animspeed * 25.0, easeout)
+                        end
+                        pcall(function()
+                            if it.draw and it.draw.Position ~= nil then
+                                it.draw.Position = Vector2.new(x0, text_y)
+                                it.draw.Text = it.label
+                                it.draw.Color = it.animtextcolor
+                            end
+                        end)
+                        if hov and self.clickframe and it.cb then
+                            it.pressedvisualtime = 15
+                            pcall(it.cb)
+                        end
+                    elseif it.type == "checkbox" and act then
+                        local lx = x0
+                        local bx = x0 + labelw + 4 * scale
+                        local by = ypos + (itemh - checksize) / 2
+                        local hov =
+                            m.x >= lx and m.x <= bx + checksize + (w0 - (labelw + 4 * scale) - checksize) and
+                            m.y >= ypos and
+                            m.y <= ypos + itemh
+                        it.targethover = hov and 1 or 0
+                        local newtarget = it.val and 1 or 0
+                        
+                        it.hoveranim = lerp(it.hoveranim or 0, it.targethover, animspeed * 15.0, easeout)
+                        it.animlabelcolor = lerp(c.labeltext, c.tabactive, it.hoveranim, easeout)
+                        it.animbordercolor = lerp(c.checkboxborder, c.checkboxhover, it.hoveranim, easeout)
+                        it.target = newtarget
+                        it.anim = lerp(it.anim or 0, it.target, animspeed * 15.0, ease)
+                        
+                        pcall(function()
+                            if not it.draw or not it.draw.Position then return end
+                            it.draw.Position = Vector2.new(lx, text_y)
+                            it.draw.Text = it.label
+                            it.draw.Color = it.animlabelcolor
+                            if not it.drawbox or not it.drawbox.Position then return end
+                            it.drawbox.Position = Vector2.new(bx, by)
+                            it.drawbox.Size = Vector2.new(checksize, checksize)
+                            it.drawbox.Filled = false
+                            it.drawbox.Color = it.animbordercolor
+                            it.drawbox.Corner = cornerc
+                            local fillsize = math.max(0, math.floor(checksize * 0.7 * it.anim + 0.5))
+                            local offset = (checksize - fillsize) / 2
+                            if not it.drawfill or not it.drawfill.Position then return end
+                            it.drawfill.Position = Vector2.new(bx + offset, by + offset)
+                            it.drawfill.Size = Vector2.new(fillsize, fillsize)
+                            it.drawfill.Filled = true
+                            it.drawfill.Visible = act and fillsize > 0
+                            it.drawfill.Corner = math.max(0, cornerc - 1)
+                        end)
+                        if hov and self.clickframe then
+                            it.val = not it.val
+                            if it.cb then
+                                pcall(it.cb, it.val)
+                            end
+                        end
+                    elseif it.type == "slider" and act then
+                        local bar_x = x0 + labelw + 4 * scale
+                        local bar_w = w0 - (labelw + 4 * scale)
+                        local bar_y = ypos + (itemh - sliderh) / 2
+                        local hov_l = m.x >= x0 and m.x < bar_x and m.y >= ypos and m.y <= ypos + itemh
+                        local hov_b = m.x >= bar_x and m.x <= bar_x + bar_w and m.y >= bar_y and m.y <= bar_y + sliderh
+                        it.targethover = (hov_l or hov_b) and 1 or 0
+                        it.hoveranim = lerp(it.hoveranim or 0, it.targethover, animspeed * 3.0, easeout)
+                        it.animlabelcolor = lerp(c.labeltext, c.tabactive, it.hoveranim, easeout)
+                        it.drawtext.Position = Vector2.new(x0, text_y)
+                        it.drawtext.Text = string.format("%s: %s%s", it.label, tostring(it.value), it.unit)
+                        it.drawtext.Color = it.animlabelcolor
+                        it.drawbox.Position = Vector2.new(bar_x, bar_y)
+                        it.drawbox.Size = Vector2.new(bar_w, sliderh)
+                        it.drawbox.Color = c.sliderbar
+                        it.drawbox.Corner = cornerc
+                        local frac = (it.max - it.min) ~= 0 and (it.value - it.min) / (it.max - it.min) or 0
+                        it.animfrac = lerp(it.animfrac, frac, animspeed * 3.0, ease)
+                        local fill_w = math.max(0, math.floor((bar_w - 2 * scale) * it.animfrac))
+                        it.drawfill.Position = Vector2.new(bar_x + 1 * scale, bar_y + 1 * scale)
+                        it.drawfill.Size = Vector2.new(fill_w, sliderh - 2 * scale)
+                        it.drawfill.Color = c.sliderfill
+                        it.drawfill.Visible = act and fill_w > 0
+                        it.drawfill.Corner = math.max(0, cornerc - 1)
+                        if hov_b and self.m1held then
+                            local rel = math.max(0, math.min(1, (m.x - bar_x) / bar_w))
+                            local val = math.floor((it.min + (it.max - it.min) * rel) / it.step + 0.5) * it.step
+                            if val ~= it.value then
+                                it.value = val
+                                if it.cb then
+                                    pcall(it.cb, val)
+                                end
+                            end
+                        end
+                    elseif (it.type == "keybind" or it.type == "hidekeybind") and act then
+                        local keytext = it.listening and "..." or (it.value == "NONE" and "?" or it.value)
+                        local keybindw = math.max(bv.keybind_min_w * scale, textw(keytext) + 8 * scale)
+                        local kx = x0 + labelw + 4 * scale
+                        local ky = ypos + (itemh - keybindminh) / 2
+                        local hov = m.x >= kx and m.x <= kx + keybindw and m.y >= ky and m.y <= ky + keybindminh
+                        it.targethover = hov and 1 or 0
+                        it.hoveranim = lerp(it.hoveranim or 0, it.targethover, animspeed * 15.0, easeout)
+                        it.targetlistening = it.listening and 1 or 0
+                        it.listeninganim = lerp(it.listeninganim or 0, it.targetlistening, animspeed * 15.0, easeout)
+                        it.animlabelcolor = lerp(c.labeltext, c.tabactive, it.hoveranim, easeout)
+                        local bgc = lerp(c.keybindbg, c.keybindlistening, it.listeninganim * 0.6, easeout)
+                        bgc = lerp(bgc, c.keybindtext, it.hoveranim * 0.2, easeout)
+                        local borderc = lerp(c.keybindborder, c.keybindlistening, it.listeninganim * 0.8, easeout)
+                        it.animboxbgcolor = lerp(it.animboxbgcolor, bgc, animspeed * 15.0, easeout)
+                        it.animbordercolor = lerp(it.animbordercolor, borderc, animspeed * 15.0, easeout)
+                        it.drawlabel.Position = Vector2.new(x0, text_y)
+                        it.drawlabel.Text = it.label
+                        it.drawlabel.Color = it.animlabelcolor
+                        it.drawbox.Position = Vector2.new(kx, ky)
+                        it.drawbox.Size = Vector2.new(keybindw, keybindminh)
+                        it.drawbox.Color = it.animboxbgcolor
+                        it.drawbox.Corner = cornerc
+                        it.drawborder.Position = Vector2.new(kx, ky)
+                        it.drawborder.Size = Vector2.new(keybindw, keybindminh)
+                        it.drawborder.Color = it.animbordercolor
+                        it.drawborder.Corner = cornerc
+                        it.drawborder.Thickness = thickt
+                        it.drawval.Position =
+                            Vector2.new(kx + (keybindw - textw(keytext)) / 2, ky + (keybindminh - texth) / 2 - 1)
+                        it.drawval.Text = keytext
+                        it.drawval.Color = c.keybindtext
+                        if hov and self.clickframe then
+                            for _, ti in ipairs(self.tabs) do
+                                for _, ii in ipairs(ti.items) do
+                                    if (ii.type == "keybind" or ii.type == "hidekeybind") then
+                                        ii.listening = false
+                                    end
+                                end
+                            end
+                            it.listening = true
+                        elseif self.clickframe and not hov and it.listening then
+                            it.listening = false
+                        end
+                        if it.listening and act then
+                            for kn, vc in pairs(vk) do
+                                if iskeypressed(vc) and not keydelay[vc] then
+                                    it.value = kn
+                                    it.listening = false
+                                    keydelay[vc] = 15
+                                    if it.type == "hidekeybind" then
+                                        self:sethidekey(kn)
+                                    end
+                                    for i, bind in ipairs(keybinds) do
+                                        if bind.cb == it.cb then
+                                            keybinds[i] = {key = kn, vk = getvk(kn), cb = it.cb}
+                                            break
+                                        end
+                                    end
+                                    if it.cb then
+                                        pcall(it.cb, kn)
+                                    end
+                                    break
+                                end
+                            end
+                        end
+                    elseif
+                        (it.type == "textbox" or it.type == "playerbox" or it.type == "dropdown" or
+                            it.type == "scalebox") and
+                            act
+                     then
+                        local box_w = w0 - (labelw + 4 * scale)
+                        if box_w < 60 * scale then
+                            box_w = 60 * scale
+                        end
+                        local box_x = x0 + labelw + 4 * scale
+                        local hov = m.x >= box_x and m.x <= box_x + box_w and m.y >= box_y and m.y <= box_y + boxh
+                        it.targethover = hov and 1 or 0
+                        it.hoveranim = lerp(it.hoveranim or 0, it.targethover, animspeed * 3.0, easeout)
+                        it.animlabelcolor = lerp(c.labeltext, c.tabactive, it.hoveranim, easeout)
+                        local ftc = it.type == "playerbox" and c.playerfill or c.textboxfocus
+                        if it.type == "dropdown" or it.type == "scalebox" then
+                            ftc = c.textboxfocus
+                        end
+                        it.targetfocus = (it.edit or (it.type == "dropdown" and it.open)) and 1 or 0
+                        it.focusanim = lerp(it.focusanim or 0, it.targetfocus, animspeed * 3.0, easeout)
+                        local focus_amount = (it.type == "playerbox" and 0.3) or 0.15
+                        local hover_amount = (it.type == "playerbox" and 0.2) or 0.15
+                        local bgc = lerp(c.textboxbg, ftc, it.focusanim * focus_amount, easeout)
+                        bgc = lerp(bgc, ftc, it.hoveranim * hover_amount, easeout)
+                        local borderc =
+                            (it.focusanim > 0.1 and c.textboxfocusborder) or (it.type == "playerbox" and c.playerborder) or
+                            c.textboxborder
+                        it.animboxbgcolor = lerp(it.animboxbgcolor, bgc, animspeed * 3.0, easeout)
+                        it.animbordercolor = lerp(it.animbordercolor, borderc, animspeed * 3.0, easeout)
+                        it.drawlabel.Position = Vector2.new(x0, text_y)
+                        it.drawlabel.Text = it.label
+                        it.drawlabel.Color = it.animlabelcolor
+                        it.drawbox.Position = Vector2.new(box_x, box_y)
+                        it.drawbox.Size = Vector2.new(box_w, boxh)
+                        it.drawbox.Color = it.animboxbgcolor
+                        it.drawbox.Corner = cornerc
+                        it.drawborder.Position = Vector2.new(box_x, box_y)
+                        it.drawborder.Size = Vector2.new(box_w, boxh)
+                        it.drawborder.Color = it.animbordercolor
+                        it.drawborder.Corner = cornerc
+                        it.drawborder.Thickness = thickt
+                        local displayval = (it.type == "dropdown" and (it.value or "Select...")) or it.value
+                        if ((it.type == "textbox" or it.type == "playerbox" or it.type == "scalebox") and it.edit) then
+                            it.cursorblink = (it.cursorblink or 0) + 1
+                            if math.floor(it.cursorblink / 30) % 2 == 0 then
+                                displayval = displayval .. "|"
+                            end
+                        end
+                        it.drawval.Position = Vector2.new(box_x + 4 * scale, text_in_box_y)
+                        it.drawval.Text = displayval
+                        it.drawval.Color =
+                            (it.type == "dropdown" and not it.value) and c.autocompletetext or c.textboxtext
+                        if it.type == "playerbox" and it.edit then
+                            pcall(function()
+                                local acs, fn = getplayerautocomplete(it.value)
+                                it.autocomplete = acs or ""
+                                if #it.autocomplete > 0 then
+                                    it.drawautocomplete.Position =
+                                        Vector2.new(box_x + 4 * scale + textw(it.value) + 1 * scale, text_in_box_y)
+                                    it.drawautocomplete.Text = it.autocomplete
+                                    it.drawautocomplete.Color = c.autocompletetext
+                                    it.drawautocomplete.Visible = true
+                                else
+                                    it.drawautocomplete.Visible = false
+                                end
+                            end)
+                        elseif it.type == "playerbox" then
+                            it.drawautocomplete.Visible = false
+                        end
+                        if it.type == "dropdown" then
+                            it.targetopenanimation = it.open and 1 or 0
+                            it.openanimation =
+                                lerp(it.openanimation or 0, it.targetopenanimation, animspeed * 3.0, ease)
+                            local arrow = "v"
+                            if it.openanimation > 0.66 then
+                                arrow = ">"
+                            elseif it.openanimation > 0.33 then
+                                arrow = "^"
+                            end
+                            it.drawarrow.Position = Vector2.new(box_x + box_w - textw(arrow) - 4 * scale, text_in_box_y)
+                            it.drawarrow.Text = arrow
+                            it.drawarrow.Color = c.textboxtext
+                        end
+                        if hov and self.clickframe then
+                            if it.type == "dropdown" then
+                                it.open = not it.open
+                            else
+                                for _, ti in ipairs(self.tabs) do
+                                    for _, ii in ipairs(ti.items) do
+                                        if (ii.type == "textbox" or ii.type == "playerbox" or ii.type == "scalebox") then
+                                            if ii.edit and ii ~= it then
+                                                ii.value = (ii.type == "playerbox" and "" or ii.value)
+                                            end
+                                            ii.edit = false
+                                        end
+                                        if ii.type == "dropdown" and ii ~= it then
+                                            ii.open = false
+                                        end
+                                    end
+                                end
+                                it.edit = true
+                            end
+                        elseif self.clickframe and not hov then
+                            if (it.type == "textbox" or it.type == "playerbox" or it.type == "scalebox") then
+                                it.edit = false
+                            end
+                            if it.type == "dropdown" and it.open then
+                                local ddh =
+                                    m.x >= box_x and m.x <= box_x + box_w and m.y >= box_y + boxh and
+                                    m.y <= box_y + boxh + (#it.options * dropdownh)
+                                if not ddh then
+                                    it.open = false
+                                end
+                            end
+                        end
+                        if
+                            ((it.type == "textbox" or it.type == "playerbox" or it.type == "scalebox") and it.edit) and
+                                act
+                         then
+                            if it.type == "scalebox" then
+                                for ik = 48, 57 do
+                                    if iskeypressed(ik) and not keydelay[ik] then
+                                        it.value = it.value .. string.char(ik)
+                                        keydelay[ik] = 10
+                                    end
+                                end
+                                if iskeypressed(0xBE) and not keydelay[0xBE] then
+                                    it.value = it.value .. "."
+                                    keydelay[0xBE] = 10
+                                end
+                                if iskeypressed(0x08) and not keydelay[0x08] then
+                                    it.value = it.value:sub(1, -2)
+                                    keydelay[0x08] = 8
+                                end
+                                if iskeypressed(0x0D) and not keydelay[0x0D] then
+                                    local newscale = tonumber(it.value)
+                                    if newscale and newscale >= 0.5 and newscale <= 2.0 then
+                                        self.uiscale = newscale
+                                        if it.cb then
+                                            pcall(it.cb, newscale)
+                                        end
+                                    else
+                                        it.value = tostring(self.uiscale)
+                                    end
+                                    it.edit = false
+                                    keydelay[0x0D] = 15
+                                end
+                            else
+                                local shift = iskeypressed(0x10)
+                                for ik = 65, 90 do
+                                    if iskeypressed(ik) and not keydelay[ik] then
+                                        local ch = shift and string.char(ik) or string.char(ik):lower()
+                                        it.value = it.value .. ch
+                                        if it.cb and it.type == "textbox" then
+                                            pcall(it.cb, it.value)
+                                        end
+                                        keydelay[ik] = 10
+                                    end
+                                end
+                                for ik = 48, 57 do
+                                    if iskeypressed(ik) and not keydelay[ik] then
+                                        it.value = it.value .. string.char(ik)
+                                        if it.cb and it.type == "textbox" then
+                                            pcall(it.cb, it.value)
+                                        end
+                                        keydelay[ik] = 10
+                                    end
+                                end
+                                if iskeypressed(0x20) and not keydelay[0x20] then
+                                    it.value = it.value .. " "
+                                    if it.cb and it.type == "textbox" then
+                                        pcall(it.cb, it.value)
+                                    end
+                                    keydelay[0x20] = 10
+                                end
+                                if iskeypressed(0x08) and not keydelay[0x08] then
+                                    it.value = it.value:sub(1, -2)
+                                    if it.cb and it.type == "textbox" then
+                                        pcall(it.cb, it.value)
+                                    end
+                                    keydelay[0x08] = 8
+                                end
+                                if
+                                    (iskeypressed(0x0D) or (it.type == "playerbox" and iskeypressed(0x09))) and
+                                        not keydelay[0x0D] and
+                                        not keydelay[0x09]
+                                 then
+                                    if it.type == "playerbox" and #it.autocomplete > 0 then
+                                        local _, fn = getplayerautocomplete(it.value)
+                                        if fn then
+                                            it.value = fn
+                                            if it.cb then
+                                                pcall(it.cb, it.value)
+                                            end
+                                        end
+                                    end
+                                    it.edit = false
+                                    keydelay[0x0D] = 15
+                                    keydelay[0x09] = 15
+                                end
+                            end
+                        end
+                        if it.type == "dropdown" and it.dropdownitems then
+                            local show_dropdown = false
+                            if it.open and act then
+                                show_dropdown = true
+                                local maxoptions = math.min(#it.dropdownitems, 20)
+                                for i_dd = 1, maxoptions do
+                                    local di = it.dropdownitems[i_dd]
+                                    if di then
+                                        pcall(function()
+                                            local option_y = box_y + boxh + (i_dd - 1) * dropdownh
+                                            local option_hov =
+                                                m.x >= box_x and m.x <= box_x + box_w and m.y >= option_y and
+                                                m.y <= option_y + dropdownh - 1 * scale
+                                            di.targethover = option_hov and 1 or 0
+                                            if di.targethover ~= (di._lasthover or 0) then
+                                                di.hoveranim = lerp(di.hoveranim or 0, di.targethover, animspeed * 3.0, easeout)
+                                                di._lasthover = di.targethover
+                                            end
+                                            di.drawbg.Position = Vector2.new(box_x, option_y)
+                                            di.drawbg.Size = Vector2.new(box_w, dropdownh - 1 * scale)
+                                            di.drawbg.Color = lerp(c.dropdownbg, c.dropdownhover, di.hoveranim, easeout)
+                                            di.drawbg.Corner = math.max(0, cornerc - 1)
+                                            di.drawtext.Position =
+                                                Vector2.new(box_x + 4 * scale, option_y + (dropdownh - 1 * scale - texth) / 2 - 1)
+                                            di.drawtext.Text = it.options[i_dd]
+                                            di.drawtext.Color = c.textboxtext
+                                            di.drawbg.Visible = true
+                                            di.drawtext.Visible = true
+                                            if option_hov and self.clickframe then
+                                                it.value = it.options[i_dd]
+                                                it.open = false
+                                                if it.cb then
+                                                    pcall(it.cb, it.value)
+                                                end
+                                            end
+                                        end)
+                                    end
+                                end
+                            end
+                            if not show_dropdown then
+                                pcall(function()
+                                    for _, dih in ipairs(it.dropdownitems or {}) do
+                                        if dih.drawbg then dih.drawbg.Visible = false end
+                                        if dih.drawtext then dih.drawtext.Visible = false end
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            for _, t in ipairs(self.tabs) do
+                if t.drawsep then
+                    t.drawsep.Visible = false
+                end
+                for _, i in ipairs(t.items) do
+                    for _, dn in ipairs(
+                        {
+                            "draw",
+                            "drawbox",
+                            "drawborder",
+                            "drawfill",
+                            "drawtext",
+                            "drawlabel",
+                            "drawval",
+                            "drawautocomplete",
+                            "drawarrow"
+                        }
+                    ) do
+                        if i[dn] then
+                            i[dn].Visible = false
+                        end
+                    end
+                    if i.dropdownitems then
+                        for _, di in ipairs(i.dropdownitems) do
+                            if di.drawbg then
+                                di.drawbg.Visible = false
+                            end
+                            if di.drawtext then
+                                di.drawtext.Visible = false
+                            end
+                        end
+                    end
+                end
+            end
+            for _, obj in ipairs(self.dropdowndrawings) do
+                if obj then
+                    obj.Visible = false
+                end
+            end
+        end
+        self.clickframe = false
+        end)
+    end
+
+    function lib:killui()
+        pcall(function()
+            self.unloaded = true
+            local d = self.draws
+            if d then
+                for _, obj in pairs(d.glowLayers or {}) do
+                    pcall(function() if obj and obj.Remove then obj:Remove() end end)
+                end
+                for _, part in ipairs(d.titleparts or {}) do
+                    pcall(function() if part.obj and part.obj.Remove then part.obj:Remove() end end)
+                end
+                for name, obj in pairs(d) do
+                    if name ~= "glowLayers" and name ~= "titleparts" then
+                        pcall(function() if obj and obj.Remove then obj:Remove() end end)
+                    end
+                end
+            end
+            for _, obj in ipairs(self.dropdowndrawings or {}) do
+                pcall(function() if obj and obj.Remove then obj:Remove() end end)
+            end
+            for _, t in ipairs(self.tabs or {}) do
+                pcall(function()
+                    if t.draw and t.draw.Remove then t.draw:Remove() end
+                    if t.drawsep and t.drawsep.Remove then t.drawsep:Remove() end
+                end)
+                for _, i in ipairs(t.items or {}) do
+                    pcall(function()
+                        for _, dn in ipairs({"draw","drawbox","drawborder","drawfill","drawtext","drawlabel","drawval","drawautocomplete","drawarrow"}) do
+                            if i[dn] and i[dn].Remove then i[dn]:Remove() end
+                        end
+                        if i.dropdownitems then
+                            for _, di in ipairs(i.dropdownitems) do
+                                if di.drawbg and di.drawbg.Remove then di.drawbg:Remove() end
+                                if di.drawtext and di.drawtext.Remove then di.drawtext:Remove() end
+                            end
+                        end
+                    end)
+                end
+            end
+            self.draws = {}
+            self.dropdowndrawings = {}
+            self.tabs = {}
+            keybinds = {}
+            collectgarbage("collect")
+        end)
+    end
+    function lib:unload()
+        self:killui()
+    end
+    return lib
+end)()
